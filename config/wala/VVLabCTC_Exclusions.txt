@@ -1,0 +1,5 @@
+javax\/.*
+sun\/.*
+com\/sun\/.*
+oracle\/.*
+com\/oracle\/.*

@@ -1,0 +1,121 @@
+<project name="incverifdbg" default="build" basedir=".">
+
+	<!-- SETTINGS -->
+
+	<!-- typical value of the java.home property is JDK_DIR/jre -->
+	<property name="jdk.home" value="${java.home}/.."/>
+
+	<property name="src.impl.dir" value="./src"/>
+	<property name="src.benchmarks.dir" value="./benchmarks"/>
+	
+	<property name="build.dir" value="./build"/>
+	<property name="build.impl.dir" value="./build/impl"/>
+	<property name="build.benchmarks.dir" value="./build/benchmarks"/>
+	
+	<property name="externals.dir" value="./externals"/>
+	
+	<property name="wala.dir" value="${externals.dir}/wala"/>
+	
+	<property name="jpf.dir" value="${externals.dir}/jpf-core"/>
+	
+	<property name="asm.dir" value="${externals.dir}/asm"/>
+
+	<property name="utils.dir" value="${externals.dir}/utils"/>
+
+	<property name="config.wala.dir" value="./config/wala"/>
+	
+	<property name="config.jpf.dir" value="./config/jpf"/>
+
+	<property name="output.dir" value="./output"/>
+
+	
+	<!-- workaround for stupid behavior of Ant 1.8 --> 
+	<presetdef name="javac">
+		<javac includeantruntime="false" />
+	</presetdef>
+	
+	<taskdef resource="net/sf/antcontrib/antlib.xml">
+		<classpath>
+			<pathelement location="${externals.dir}/ant-contrib-1.0b3.jar"/>
+		</classpath>
+	</taskdef>
+
+
+	<path id="classpath.base">
+		<pathelement location="${jpf.dir}/build/jpf.jar"/>
+		<pathelement location="${jpf.dir}/build/jpf-annotations.jar"/>
+		<pathelement location="${wala.dir}/com.ibm.wala.core.jar"/>
+		<pathelement location="${wala.dir}/com.ibm.wala.util.jar"/>
+		<pathelement location="${wala.dir}/com.ibm.wala.shrike.jar"/>
+		<pathelement location="${wala.dir}/dat"/>
+		<pathelement location="${jdk.home}/lib/tools.jar"/>
+		<pathelement location="${asm.dir}/asm-6.0.jar"/>
+		<pathelement location="${asm.dir}/asm-analysis-6.0.jar"/>
+		<pathelement location="${asm.dir}/asm-commons-6.0.jar"/>
+		<pathelement location="${asm.dir}/asm-tree-6.0.jar"/>
+		<pathelement location="${asm.dir}/asm-util-6.0.jar"/>
+		<pathelement location="${asm.dir}/asm-xml-6.0.jar"/>
+		<pathelement location="${utils.dir}/version-gen.jar"/>
+	</path>
+
+	<path id="classpath.build">
+		<path refid="classpath.base"/>
+	</path>
+	
+	<path id="classpath.run">
+		<path refid="classpath.base"/>
+		<pathelement location="${build.impl.dir}"/>
+		<pathelement location="${build.benchmarks.dir}"/>
+	</path>
+
+
+	<!-- BUILDING -->
+	
+	<target name="init" depends="clean">
+		<mkdir dir="${build.dir}" />
+		<mkdir dir="${build.impl.dir}" />
+		<mkdir dir="${build.benchmarks.dir}" />
+		<mkdir dir="${output.dir}" />
+	</target>
+
+	<target name="clean">
+		<delete dir="${build.dir}" />
+	</target>
+
+	<target name="compile.impl" depends="init">
+		<javac srcdir="${src.impl.dir}" destdir="${build.impl.dir}" deprecation="on" debug="on">
+			<classpath refid="classpath.build"/>
+		</javac>
+	</target>
+
+	<target name="compile.benchmarks" depends="init">
+		<javac srcdir="${src.benchmarks.dir}" destdir="${build.benchmarks.dir}" deprecation="on" debug="on">
+			<classpath refid="classpath.build"/>
+		</javac>
+	</target>
+	
+	<target name="build" depends="compile.impl,compile.benchmarks"/>
+
+
+	<!-- EXPERIMENTS -->
+
+	<target name="run.benchmarks" depends="build">
+		<for list="alarmclock,prodcons,repworkers" param="appname">
+		<sequential>
+			<java classname="cz.cuni.mff.d3s.incverif.Main" fork="true" output="${output.dir}/@{appname}_thpairwise.out">
+				<arg value="alg1:thpairwise"/>
+				<arg value="${output.dir}/versions_@{appname}"/>
+				<arg value="+classpath=.,${build.benchmarks.dir}"/>
+				<arg value="+site=./site.properties"/>
+				<arg value="${config.jpf.dir}/@{appname}.jpf"/>
+				<jvmarg value="-Xmx8g"/>
+				<jvmarg value="-Xss32m"/>
+				<sysproperty key="WALA_HOME" value="."/>
+				<classpath refid="classpath.run"/>
+			</java>
+		</sequential>
+		</for>
+	</target>
+
+</project>
+

@@ -1,0 +1,5 @@
+target=fse2006apps.Main
+target.args=
+analysis.target.dir=./build/benchmarks
+analysis.exclusion.file=./config/wala/VVLabCTC_Exclusions.txt
+search.properties=gov.nasa.jpf.vm.NoUncaughtExceptionsProperty

@@ -1,0 +1,4 @@
+target=fse2006AlarmClock1.AlarmClock
+target.args=
+analysis.target.dir=./build/benchmarks
+analysis.exclusion.file=./config/wala/VVLabCTC_Exclusions.txt
