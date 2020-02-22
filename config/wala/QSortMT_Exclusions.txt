@@ -1,0 +1,8 @@
+sun\/.*
+com\/sun\/.*
+javafx\/.*
+org\/jcp\/.*
+oracle\/.*
+com\/oracle\/.*
+netscape\/.*
+org\/ietf\/.*

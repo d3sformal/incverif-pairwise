@@ -1,0 +1,4 @@
+target=net.sf.cache4j.test.Tester
+target.args=
+analysis.target.dir=./build/benchmarks
+analysis.exclusion.file=./config/wala/Cache4j_Exclusions.txt

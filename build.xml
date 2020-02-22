@@ -100,7 +100,7 @@
 	<!-- EXPERIMENTS -->
 
 	<target name="run.benchmarks" depends="build">
-		<for list="alarmclock,prodcons,repworkers" param="appname">
+		<for list="alarmclock,prodcons,raxextended,repworkers,sor,cache4j,elevator,qsortmt,papabench" param="appname">
 		<sequential>
 			<java classname="cz.cuni.mff.d3s.incverif.Main" fork="true" output="${output.dir}/@{appname}_thpairwise.out">
 				<arg value="alg1:thpairwise"/>

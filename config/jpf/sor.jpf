@@ -1,0 +1,4 @@
+target=sor.Sor
+target.args=3,2
+analysis.target.dir=./build/benchmarks
+analysis.exclusion.file=./config/wala/VVLabCTC_Exclusions.txt

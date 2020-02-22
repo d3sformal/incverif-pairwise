@@ -1,0 +1,4 @@
+target=elevator.Elevator
+target.args=
+analysis.target.dir=./build/benchmarks
+analysis.exclusion.file=./config/wala/Elevator_Exclusions.txt
