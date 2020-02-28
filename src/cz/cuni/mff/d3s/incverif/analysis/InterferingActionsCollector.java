@@ -39,6 +39,7 @@ import cz.cuni.mff.d3s.incverif.common.FieldAccess;
 import cz.cuni.mff.d3s.incverif.common.ArrayObjectAccess;
 import cz.cuni.mff.d3s.incverif.common.SynchEventExec;
 import cz.cuni.mff.d3s.incverif.common.SynchEventType;
+import cz.cuni.mff.d3s.incverif.common.Utils;
 import cz.cuni.mff.d3s.incverif.wala.WALAUtils;
 import cz.cuni.mff.d3s.incverif.wala.WALAContext;
 
@@ -78,6 +79,9 @@ public class InterferingActionsCollector
 			ProgramPoint startPP = fr.progPoint;
 			ProgramPoint endPP = fr.progPoint;
 
+			// we ignore code locations that belong into the Java core standard library
+			if (Utils.isJavaStandardLibraryMethod(fr.progPoint.methodSig)) continue;
+
 			// expand to cover also usage of the read field value (transitively) by subsequent instructions (over-approximation)
 			// this includes operands for conditional branching instructions within the respective code block
 			LinkedList<ProgramPoint> consumingPPs = WALAUtils.findResultsConsumingEndBoundaryForBytecodeInsn(endPP, true, walaCtx);
@@ -98,6 +102,9 @@ public class InterferingActionsCollector
 			ProgramPoint startPP = fw.progPoint;
 			ProgramPoint endPP = fw.progPoint;
 
+			// we ignore code locations that belong into the Java core standard library
+			if (Utils.isJavaStandardLibraryMethod(fw.progPoint.methodSig)) continue;
+
 			// expand to cover also loading of the target heap object and the new value
 			startPP = WALAUtils.findOperandsLoadingStartBoundaryForBytecodeInsn(startPP, walaCtx);
 
@@ -111,6 +118,9 @@ public class InterferingActionsCollector
 		{
 			ProgramPoint startPP = aor.progPoint;
 			ProgramPoint endPP = aor.progPoint;
+
+			// we ignore code locations that belong into the Java core standard library
+			if (Utils.isJavaStandardLibraryMethod(aor.progPoint.methodSig)) continue;
 
 			// expand to cover also usage of the read array element value (transitively) by subsequent instructions (over-approximation)
 			// this includes operands for conditional branching instructions within the respective code block
@@ -131,6 +141,9 @@ public class InterferingActionsCollector
 		{
 			ProgramPoint startPP = aow.progPoint;
 			ProgramPoint endPP = aow.progPoint;
+	
+			// we ignore code locations that belong into the Java core standard library
+			if (Utils.isJavaStandardLibraryMethod(aow.progPoint.methodSig)) continue;
 
 			// expand to cover also loading of the target heap array object, the element index, and the new value
 			startPP = WALAUtils.findOperandsLoadingStartBoundaryForBytecodeInsn(startPP, walaCtx);
@@ -144,6 +157,9 @@ public class InterferingActionsCollector
 		for (SynchEventExec sev : synchEventColl.synchEvents)
 		{
 			SynchEventType sevType = sev.targetEvent.eventType;
+	
+			// we ignore code locations that belong into the Java core standard library
+			if (Utils.isJavaStandardLibraryMethod(sev.progPoint.methodSig)) continue;
 
 			if (sevType == SynchEventType.LOCK_ANYOBJECT)
 			{

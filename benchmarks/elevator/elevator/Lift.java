@@ -99,16 +99,18 @@ class Lift extends Thread {
                 // System.out.println("Lift::doIdle - success with claimUp " + floor); // CARE
                 foundFloor = true;
                 targetFloor = floor;
-                pickupOn[floor] |= UP;
-                travelDir = (targetFloor > currentFloor) ? UP : DOWN;
-            }
+                pickupOn[floor] = pickupOn[floor] | UP;
+                if (targetFloor > currentFloor) travelDir = UP;
+                else travelDir = DOWN;
+			}
             else if (controls.claimDown(getName(), floor)) {
                 // System.out.println("Lift::doIdle - success with claimDown " + floor); // CARE
                 foundFloor = true;
                 targetFloor = floor;
-                pickupOn[floor] |= DOWN;
-                travelDir = (targetFloor > currentFloor) ? UP : DOWN;
-            }
+                pickupOn[floor] = pickupOn[floor] | DOWN;
+                if (targetFloor > currentFloor) travelDir = UP;
+                else travelDir = DOWN;
+			} 
         }
     
         if (foundFloor) {
@@ -121,8 +123,11 @@ class Lift extends Thread {
     // Drop off passengers if we have to
     // Then pick up passengers if we have to
     private void doMoving() {
-        currentFloor += (travelDir == UP) ? 1 : -1;
-        int oldDir = travelDir;
+        
+		if (travelDir == UP) currentFloor += 1;
+		else currentFloor += -1;
+       
+		int oldDir = travelDir;
 
         if (travelDir == UP && currentFloor == lastFloor) travelDir = DOWN;
         if (travelDir == DOWN && currentFloor == firstFloor) travelDir = UP;
@@ -140,7 +145,7 @@ class Lift extends Thread {
         if (((pickupOn[currentFloor] & UP) != 0) ||
                 (travelDir == UP && controls.claimUp(getName(), currentFloor))) {
             addPeople(controls.getUpPeople(currentFloor));
-            pickupOn[currentFloor] &= ~UP;
+            pickupOn[currentFloor] = pickupOn[currentFloor] & ~UP;
         }
 
         // Pickup people who want to go down if:
@@ -150,7 +155,7 @@ class Lift extends Thread {
         if (((pickupOn[currentFloor] & DOWN) != 0) ||
                 (travelDir == DOWN && controls.claimDown(getName(), currentFloor))) {
             addPeople(controls.getDownPeople(currentFloor));
-            pickupOn[currentFloor] &= ~DOWN;
+            pickupOn[currentFloor] = pickupOn[currentFloor] & ~DOWN;
         }
 
         if (travelDir == UP) {
@@ -217,7 +222,7 @@ class Lift extends Thread {
         //System.out.println(getName() + " picking up " + people.size() + " passengers on " + currentFloor);
         for (Iterator it = people.iterator(); it.hasNext(); ) {
             int toFloor = ((Integer) it.next()).intValue();
-            peopleFor[toFloor] += 1;
+            peopleFor[toFloor] = peopleFor[toFloor] + 1;
         }
     }
 }

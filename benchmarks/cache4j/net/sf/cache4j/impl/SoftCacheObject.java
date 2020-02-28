@@ -18,11 +18,13 @@ public class SoftCacheObject extends CacheObject {
     }
 
     Object getObject() {
-        return _obj==null ? null : ((SoftReference)_obj).get();
+        if (_obj==null) return null;
+		else return ((SoftReference)_obj).get();
     }
 
     void setObject(Object obj) {
-        _obj = obj==null ? null : new SoftReference(obj);
+		if (obj==null) _obj = null;
+		else _obj = new SoftReference(obj);
     }
 }
 

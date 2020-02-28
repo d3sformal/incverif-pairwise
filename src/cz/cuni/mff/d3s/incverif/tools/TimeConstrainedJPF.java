@@ -19,6 +19,8 @@ import gov.nasa.jpf.JPF;
 import gov.nasa.jpf.Config;
 import gov.nasa.jpf.ListenerAdapter;
 import gov.nasa.jpf.vm.VM;
+import gov.nasa.jpf.vm.ThreadInfo;
+import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.search.Search;
 
 
@@ -49,8 +51,21 @@ public class TimeConstrainedJPF extends ListenerAdapter
 		{
 			System.out.println("[LOG] terminating search because time limit was reached");
 
-			duration = duration / 1000;
 			search.terminate();
 		}
 	}
+
+	public void executeInstruction(VM vm, ThreadInfo curTh, Instruction insn)
+	{
+		long duration = System.currentTimeMillis() - this.startTime;
+
+		if (duration >= maxTime)
+		{
+			System.out.println("[LOG] terminating search because time limit was reached");
+
+			vm.getSearch().terminate();
+			vm.breakTransition("reached time limit");
+		}
+	}
+
 }

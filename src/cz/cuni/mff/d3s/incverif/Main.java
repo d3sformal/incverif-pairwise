@@ -150,6 +150,8 @@ public class Main
 
 		for (CodeBlockBoundary modifiedCBB : relevantModifiedCodeFragments)
 		{
+			expStats.initForNewCodeFragment();
+
 			// generate version of the subject program that does not contain the respective "modified code fragment"
 			// we use the multiver generator tool implemented by Filip Kliber
 
@@ -185,6 +187,8 @@ public class Main
 				ex.printStackTrace();
 				return;
 			}
+
+			expStats.incNumberOfProcessedCodeFragments();
 
 			System.out.print("\n\n");
 			System.out.println("[LOG] modifiedCBB: methodSig = " + modifiedCBB.getMethodSignature() + ", startLoc = (bcidx:" + modifiedCBB.startLoc.insnBcIndex + ",bcpos:" + modifiedCBB.startLoc.insnBcPos + "), endLoc = (bcidx:" + modifiedCBB.endLoc.insnBcIndex + ",bcpos:" + modifiedCBB.endLoc.insnBcPos + ")");
@@ -287,7 +291,7 @@ public class Main
 
 					jpfConfigDeletion.setProperty("classpath", ".," + genVersionsPathUniqueStr + File.separator + "stripped");
 	
-					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigDeletion, globalMaxThreadID, outerLoopThreadID, deletionCBB, expStats);
+					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigDeletion, globalMaxThreadID, outerLoopThreadID, deletionCBB, walaCtx, expStats);
 
 					// original program version (current affected "modified code fragment" is present, simulating addition)
 
@@ -300,7 +304,7 @@ public class Main
 
 					jpfConfigAddition.setProperty("classpath", ".," + targetClassPathStr);
 	
-					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigAddition, globalMaxThreadID, outerLoopThreadID, additionCBB, expStats);
+					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigAddition, globalMaxThreadID, outerLoopThreadID, additionCBB, walaCtx, expStats);
 
 					// prepare for the next iteration of the inner loop
 
@@ -315,12 +319,12 @@ public class Main
 			}
 		}
 
-		long jpfSumRunningTime = 0;
-		for (Long rt : expStats.jpfRunningTimes) jpfSumRunningTime += rt.longValue();
-		long jpfAvgRunningTime = jpfSumRunningTime / expStats.jpfRunningTimes.size();
+		long totalSumRunningTimeOverCodeFragments = 0;
+		for (Long rt : expStats.getSumRunningTimesForCodeFragments()) totalSumRunningTimeOverCodeFragments += rt.longValue();
+		long avgRunningTimeOverCodeFragments = totalSumRunningTimeOverCodeFragments / expStats.getNumberOfProcessedCodeFragments();
 
 		System.out.print("\n\n");
-		System.out.println("[JPF SUMMARY] total runs = " + expStats.jpfTotalCountRuns + ", timedout runs = " + expStats.jpfCountTimedoutRuns + ", average running time = " + jpfAvgRunningTime + " s \n");
+		System.out.println("[JPF SUMMARY] total runs over thread pairs = " + expStats.getTotalCountOfRunsOverThreadPairs() + ", timedout runs over thread pairs = " + expStats.getCountOfTimedoutRunsOverThreadPairs() + ", average running time over modified code fragments = " + avgRunningTimeOverCodeFragments + " s \n");
 	}
 
 	private static Set<CodeBlockBoundary> determineAffectedCodeBlocksForInterferingActions(WALAContext walaCtx, String mainClassName, String targetClassPath, String walaExclusionFilePath) throws Exception
@@ -397,9 +401,11 @@ public class Main
 		return codeBlocks;
 	}
 
-	private static int checkProgramVersionByJPF(Config jpfConfig, int oldGlobalMaxThreadID, int modifiedThreadID, CodeBlockBoundary modifiedCBB, ExperimentsStats expStats)
+	private static int checkProgramVersionByJPF(Config jpfConfig, int oldGlobalMaxThreadID, int modifiedThreadID, CodeBlockBoundary modifiedCBB, WALAContext walaCtx, ExperimentsStats expStats)
 	{
 		int newGlobalMaxThreadID = oldGlobalMaxThreadID;
+
+		String modifiedThreadEntryMethodSig = null;
 
 		Date jpfStartTime = new Date();
 
@@ -417,6 +423,8 @@ public class Main
 
 			// get the updated maximum thread ID at the end of each JPF run
 			newGlobalMaxThreadID = thExecMon.getMaxThreadID();
+		
+			modifiedThreadEntryMethodSig = thExecMon.getModifiedThreadEntryMethodSig();
 		}
 		catch (Exception ex)
 		{
@@ -431,17 +439,32 @@ public class Main
 
 		System.out.println("[JPF] time = " + jpfUsedTimeInSec + " s \n");
 
-		expStats.jpfTotalCountRuns++;
+		try
+		{
+			// we need to ignore all JPF runs where the modified code fragment is actually not reachable in the call graph from the entry method of a thread marked as modified (through ID)
+			// recorded signature of the entry method is null, for example, when the respective thread is not started at all (i.e., when the call of its "Thread.start()" method belongs to the modified code fragment and therefore has been removed)
+			if ( (modifiedThreadEntryMethodSig != null) && WALAUtils.isMethodReachableInThreadCallGraph(modifiedThreadEntryMethodSig, modifiedCBB.getMethodSignature(), walaCtx) )
+			{
+				expStats.incTotalCountOfRunsOverThreadPairs();
 
-		if (jpfUsedTimeInSec >= TIME_LIMIT_SEC)
-		{
-			expStats.jpfCountTimedoutRuns++;
+				if (jpfUsedTimeInSec >= TIME_LIMIT_SEC)
+				{
+					expStats.incCountOfTimedoutRunsOverThreadPairs();
+				}
+				else
+				{
+					expStats.addRunningTimeForThreadPair(jpfUsedTimeInSec);
+				}
+			}
 		}
-		else
+		catch (Exception ex)
 		{
-			expStats.jpfRunningTimes.add(jpfUsedTimeInSec);
+			System.err.println("[ERROR] cannot process results of JPF");
+			ex.printStackTrace();
+			if (ex.getCause() != null) ex.getCause().printStackTrace();
 		}
-	
+
+
 		return newGlobalMaxThreadID;
 	}
 
@@ -513,9 +536,65 @@ public class Main
 
 	static class ExperimentsStats
 	{
-		public int jpfTotalCountRuns = 0;
-		public int jpfCountTimedoutRuns = 0;
-		public List<Long> jpfRunningTimes = new ArrayList<Long>();
+		private long sumRunningTimesOverPairsForCurrentFragment = -1;
+		private List<Long> allRunningTimesOverFragments = new ArrayList<Long>();
+		private int totalNumProcessedCodeFragments = 0;
+		private int totalCountRunsOverThreadPairs = 0;
+		private int countTimedoutRunsOverThreadPairs = 0;
+
+
+		public void initForNewCodeFragment()
+		{
+			if (sumRunningTimesOverPairsForCurrentFragment != -1)
+			{
+				allRunningTimesOverFragments.add(sumRunningTimesOverPairsForCurrentFragment);
+			}
+	
+			sumRunningTimesOverPairsForCurrentFragment = 0;
+		}
+		
+		public List<Long> getSumRunningTimesForCodeFragments()
+		{
+			return allRunningTimesOverFragments;
+		}
+	
+		public int getNumberOfProcessedCodeFragments()
+		{
+			return totalNumProcessedCodeFragments;
+		}
+
+		public void incNumberOfProcessedCodeFragments()
+		{
+			totalNumProcessedCodeFragments += 1;
+		}
+
+		public int getTotalCountOfRunsOverThreadPairs()
+		{
+			return totalCountRunsOverThreadPairs;
+		}
+
+		public int getCountOfTimedoutRunsOverThreadPairs()
+		{
+			return countTimedoutRunsOverThreadPairs;
+		}
+
+		public void incTotalCountOfRunsOverThreadPairs()
+		{
+			totalCountRunsOverThreadPairs += 1;
+		}
+
+		public void incCountOfTimedoutRunsOverThreadPairs()
+		{
+			countTimedoutRunsOverThreadPairs += 1;
+		}
+
+		public void addRunningTimeForThreadPair(long rt)
+		{
+			// if the actual running time is 0 (e.g., several miliseconds) then we report 1 second
+			if (rt == 0) rt = 1;
+
+			sumRunningTimesOverPairsForCurrentFragment += rt;
+		}
 	}
 
 }

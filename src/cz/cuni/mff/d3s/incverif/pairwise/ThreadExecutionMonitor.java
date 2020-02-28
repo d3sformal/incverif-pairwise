@@ -48,6 +48,9 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 	// the maximum thread ID observed during the run of JPF
 	private int maxThreadID;
 
+	// signature of the entrypoint method (run) for the modified thread
+	private String thModifiedEntryMethodSig;
+
 
 	public ThreadExecutionMonitor(Config cfg, int tmid, CodeBlockBoundary mcbb)
 	{
@@ -68,6 +71,12 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 		curTraceTrs.push(rootTr);
 
 		curTr = new TransitionInfo(ExecState.BEFOREFIRST);
+
+		// main thread needs to be handled in a special way
+		if (thModifiedID == 0) 
+		{
+			this.thModifiedEntryMethodSig = search.getVM().getCurrentApplicationContext().getMainClassName() + ".main([Ljava/lang/String;)V";
+		}
 
 		//System.out.println("[DEBUG PP] ThreadExecutionMonitor (search start): -> before first (" + curTr.state.ordinal() + ")");
 	}
@@ -204,11 +213,21 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 	public void threadStarted(VM vm, ThreadInfo startedThread)
 	{
 		if (startedThread.getId() > maxThreadID) maxThreadID = startedThread.getId();
+				
+		if (thModifiedID == startedThread.getId())
+		{
+			this.thModifiedEntryMethodSig = startedThread.getClassInfo().getName() + ".run()V";
+		}
 	}
 
 	public int getMaxThreadID()
 	{
 		return this.maxThreadID;
+	}
+
+	public String getModifiedThreadEntryMethodSig()
+	{
+		return this.thModifiedEntryMethodSig;
 	}
 
 	public boolean beforeFirstModifiedCode()

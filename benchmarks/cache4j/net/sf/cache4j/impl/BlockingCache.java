@@ -184,7 +184,8 @@ public class BlockingCache implements Cache, ManagedCache {
 
         _config = (CacheConfigImpl)config;
 
-        _map = _config.getMaxSize()>1000 ? new HashMap(1024) : new HashMap();
+        if (_config.getMaxSize()>1000) _map = new HashMap(1024);
+		else _map = new HashMap();
         _memorySize = 0;
         _tmap = new TreeMap(_config.getAlgorithmComparator());
         _cacheInfo = new CacheInfoImpl();
@@ -214,8 +215,12 @@ public class BlockingCache implements Cache, ManagedCache {
             while( (_config.getMaxSize() > 0 &&  _map.size()+1>_config.getMaxSize() ) ||
                     (_config.getMaxMemorySize()  > 0 && _memorySize+objSize > _config.getMaxMemorySize())  ) {
 
-                Object firstKey = _tmap.size()==0 ? null : _tmap.firstKey();
-                CacheObject fco = firstKey==null ? null : (CacheObject)_tmap.remove(firstKey);
+                Object firstKey = null;
+				if (_tmap.size()==0) firstKey = null;
+				else firstKey = _tmap.firstKey();
+                CacheObject fco = null;
+				if (firstKey==null) fco = null;
+				else fco = (CacheObject)_tmap.remove(firstKey);
 
                 if(fco!=null) {
                     CacheObject co = (CacheObject)_map.get(fco.getObjectId());

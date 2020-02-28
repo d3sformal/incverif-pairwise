@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Set;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -29,6 +30,7 @@ import com.ibm.wala.classLoader.IClass;
 import com.ibm.wala.classLoader.IField;
 import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.classLoader.IBytecodeMethod; 
+import com.ibm.wala.classLoader.CallSiteReference;
 import com.ibm.wala.ipa.cha.IClassHierarchy;
 import com.ibm.wala.ipa.cha.ClassHierarchy;
 import com.ibm.wala.ipa.callgraph.AnalysisScope;
@@ -766,6 +768,56 @@ public class WALAUtils
 		IInstruction[] mthInstructions = bcMth.getInstructions();
 
 		if ((startPP.insnIndex == 0) && (endPP.insnIndex == mthInstructions.length - 1)) return true;
+
+		return false;
+	}
+
+	public static boolean isMethodReachableInThreadCallGraph(String entryMthSig, String targetMthSig, WALAContext walaCtx) throws Exception
+	{
+		// queue of method signatures to be processed
+		LinkedList<String> mthWorklist = new LinkedList<String>();
+		mthWorklist.add(entryMthSig);
+
+		// set of methods that were already inspected
+		Set<String> visitedMthSigs = new HashSet<String>();
+
+		while ( ! mthWorklist.isEmpty() )
+		{
+			String curMthSig = mthWorklist.removeFirst();
+
+			visitedMthSigs.add(curMthSig);
+
+			IMethod curMth = findMethod(curMthSig, walaCtx);
+
+			// loop over methods called from within the current one
+
+			for ( CGNode curMthNode : walaCtx.callGraph.getNodes(curMth.getReference()) )
+			{
+				Iterator<CallSiteReference> callSitesIt = curMthNode.iterateCallSites();
+
+				while (callSitesIt.hasNext())
+				{
+					CallSiteReference callSite = callSitesIt.next();
+
+					for ( CGNode calleeNode : walaCtx.callGraph.getPossibleTargets(curMthNode, callSite) )
+					{
+						IMethod calleeMth = calleeNode.getMethod();
+
+						String calleeMthSig = calleeMth.getSignature();
+
+						// we should not cross thread start boundary
+						if ( calleeMthSig.contains(".start()V") && walaCtx.classHierarchy.isSubclassOf(calleeMth.getDeclaringClass(), findClass("java.lang.Thread", walaCtx)) ) continue;
+
+
+						if (targetMthSig.equals(calleeMthSig)) return true;
+
+						if (visitedMthSigs.contains(calleeMthSig)) continue;
+
+						mthWorklist.add(calleeMthSig);
+					}
+				}
+			}
+		}
 
 		return false;
 	}
