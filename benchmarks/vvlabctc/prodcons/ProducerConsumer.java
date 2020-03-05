@@ -63,7 +63,9 @@ class Buffer implements BufferInterface {
         array = new Object[b];
     }
 
-    public synchronized void put(Object x) {
+	// INJECTED ERROR
+    public /*synchronized*/ void put(Object x) {
+      synchronized (this) {
 		while (usedSlots == SIZE) {
 			try {
 				//System.out.println("producer wait");
@@ -79,8 +81,9 @@ class Buffer implements BufferInterface {
 		if (usedSlots == 0) {
 			notifyAll();
 		}
+	  }
         	
-        usedSlots++;
+      usedSlots++;
     }
 
     public synchronized Object get() {

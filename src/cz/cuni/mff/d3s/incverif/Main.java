@@ -51,6 +51,8 @@ import cz.cuni.mff.d3s.incverif.analysis.InterferingActionsCollector;
 import cz.cuni.mff.d3s.incverif.analysis.MethodInvokeLocationsCollector;
 import cz.cuni.mff.d3s.incverif.analysis.VariableUpdateLocationsCollector;
 import cz.cuni.mff.d3s.incverif.pairwise.ThreadExecutionMonitor;
+import cz.cuni.mff.d3s.incverif.tools.ErrorInfoPrinter;
+import cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF;
 
 import cz.cuni.mff.d3s.multiver.MultiVerGenMain;
 import cz.cuni.mff.d3s.multiver.SourceLocation;
@@ -59,7 +61,8 @@ import cz.cuni.mff.d3s.multiver.SourceLocations;
 
 public class Main
 {
-	public static final int TIME_LIMIT_SEC = 60;
+	public static final int TIME_LIMIT_SEC_INCR = 60;
+	public static final int TIME_LIMIT_SEC_FULL = 3600;
 
 
 	public static void main(String[] args)
@@ -78,15 +81,10 @@ public class Main
 		// load the part of configuration specified in build.xml
 		Config jpfConfigBase = JPF.createConfig(cmdArgs);
 
-		jpfConfigBase.setProperty("listener", "gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
-		jpfConfigBase.setProperty("jpf.time_limit", String.valueOf(TIME_LIMIT_SEC));
+		jpfConfigBase.setProperty("listener", "gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
 		jpfConfigBase.setProperty("race.exclude", "");
-
-		if (mode.equals("alg1:thpairwise"))
-		{
-			jpfConfigBase.setProperty("vm.scheduler.sync.class", "cz.cuni.mff.d3s.incverif.pairwise.PairwiseSyncPolicy");
-			jpfConfigBase.setProperty("vm.scheduler.sharedness.class", "cz.cuni.mff.d3s.incverif.pairwise.PairwiseSharednessPolicy");
-		}
+		jpfConfigBase.setProperty("jpf.max_memory_limit", "10240");
+		jpfConfigBase.setProperty("jpf.free_memory_limit", "1024");
 
 		// get the main class name from JPF configuration parameters (including command line)
 		String mainClassName = jpfConfigBase.getProperty("target");
@@ -138,7 +136,7 @@ public class Main
 
 		Date analysisFinishTime = new Date();
 		
-		long analysisUsedTimeInSec = computeTimeDiff(analysisStartTime, analysisFinishTime);
+		long analysisUsedTimeInSec = computeTimeDiffInSec(analysisStartTime, analysisFinishTime);
 
 		long analysisUsedMemoryInMB = (Runtime.getRuntime().totalMemory() >> 20);
   		
@@ -146,11 +144,13 @@ public class Main
 
 		// step 3: for every relevant "modified code fragment", generate the corresponding version of the subject program and run JPF upon it
 
-		ExperimentsStats expStats = new ExperimentsStats();
+		ExperimentsStats incrExpStats = new ExperimentsStats();
+		ExperimentsStats fullExpStats = new ExperimentsStats();
 
 		for (CodeBlockBoundary modifiedCBB : relevantModifiedCodeFragments)
 		{
-			expStats.initForNewCodeFragment();
+			incrExpStats.initForNewCodeFragment();
+			fullExpStats.initForNewCodeFragment();
 
 			// generate version of the subject program that does not contain the respective "modified code fragment"
 			// we use the multiver generator tool implemented by Filip Kliber
@@ -188,7 +188,8 @@ public class Main
 				return;
 			}
 
-			expStats.incNumberOfProcessedCodeFragments();
+			incrExpStats.incNumberOfProcessedCodeFragments();
+			fullExpStats.incNumberOfProcessedCodeFragments();
 
 			System.out.print("\n\n");
 			System.out.println("[LOG] modifiedCBB: methodSig = " + modifiedCBB.getMethodSignature() + ", startLoc = (bcidx:" + modifiedCBB.startLoc.insnBcIndex + ",bcpos:" + modifiedCBB.startLoc.insnBcPos + "), endLoc = (bcidx:" + modifiedCBB.endLoc.insnBcIndex + ",bcpos:" + modifiedCBB.endLoc.insnBcPos + ")");
@@ -272,11 +273,19 @@ public class Main
 					}
 		
 					// we have to keep the base configuration intact (since it will be used many times)
-					Config jpfConfigFull = (Config) jpfConfigBase.clone();
+					Config jpfConfigIncr = (Config) jpfConfigBase.clone();
 
-					jpfConfigFull.setProperty("incverif.pairwise.thread.modified.id", String.valueOf(outerLoopThreadID));
-					jpfConfigFull.setProperty("incverif.pairwise.thread.other.id", String.valueOf(innerLoopThreadID));
+					if (mode.equals("alg1:thpairwise"))
+					{
+						jpfConfigIncr.setProperty("vm.scheduler.sync.class", "cz.cuni.mff.d3s.incverif.pairwise.PairwiseSyncPolicy");
+						jpfConfigIncr.setProperty("vm.scheduler.sharedness.class", "cz.cuni.mff.d3s.incverif.pairwise.PairwiseSharednessPolicy");
+					}
+
+					jpfConfigIncr.setProperty("incverif.pairwise.thread.modified.id", String.valueOf(outerLoopThreadID));
+					jpfConfigIncr.setProperty("incverif.pairwise.thread.other.id", String.valueOf(innerLoopThreadID));
 	
+					jpfConfigIncr.setProperty("jpf.time_limit", String.valueOf(TIME_LIMIT_SEC_INCR));
+
 					// run JPF for the given pair of threads on the input subject program
 						// if the particular dynamic thread instance determined by the outer while loop is not an instance of static thread T, then just a single thread interleaving will be explored (quick and easy solution for the purpose of experimental evaluation)
 	
@@ -287,11 +296,11 @@ public class Main
 		
 					// update the JPF configuration to reflect the directory that contains the generated modified version of the subject program (without "modified code fragment")
 
-					Config jpfConfigDeletion = (Config) jpfConfigFull.clone();
+					Config jpfConfigIncrDeletion = (Config) jpfConfigIncr.clone();
 
-					jpfConfigDeletion.setProperty("classpath", ".," + genVersionsPathUniqueStr + File.separator + "stripped");
+					jpfConfigIncrDeletion.setProperty("classpath", ".," + genVersionsPathUniqueStr + File.separator + "stripped");
 	
-					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigDeletion, globalMaxThreadID, outerLoopThreadID, deletionCBB, walaCtx, expStats);
+					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigIncrDeletion, globalMaxThreadID, outerLoopThreadID, deletionCBB, walaCtx, incrExpStats);
 
 					// original program version (current affected "modified code fragment" is present, simulating addition)
 
@@ -300,11 +309,11 @@ public class Main
 
 					// update the JPF configuration to reflect the directory that contains the received original version of the subject program (with "modified code fragment")
 	
-					Config jpfConfigAddition = (Config) jpfConfigFull.clone();
+					Config jpfConfigIncrAddition = (Config) jpfConfigIncr.clone();
 
-					jpfConfigAddition.setProperty("classpath", ".," + targetClassPathStr);
+					jpfConfigIncrAddition.setProperty("classpath", ".," + targetClassPathStr);
 	
-					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigAddition, globalMaxThreadID, outerLoopThreadID, additionCBB, walaCtx, expStats);
+					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigIncrAddition, globalMaxThreadID, outerLoopThreadID, additionCBB, walaCtx, incrExpStats);
 
 					// prepare for the next iteration of the inner loop
 
@@ -317,14 +326,56 @@ public class Main
 	
 				innerLoopThreadID = 0;
 			}
+
+			// process full verification 
+
+			System.out.print("\n");
+			System.out.println("[LOG] full verification");
+
+			// we have to keep the base configuration intact (since it will be used many times)
+			Config jpfConfigFull = (Config) jpfConfigBase.clone();
+
+			jpfConfigFull.setProperty("jpf.time_limit", String.valueOf(TIME_LIMIT_SEC_FULL));
+
+			// modified program version (current affected "modified code fragment" is removed, simulating deletion)
+
+			System.out.println("[LOG] checking modified program version (current affected code fragment is removed, simulating deletion)");
+			System.out.println("[LOG] deletionCBB: methodSig = " + deletionCBB.getMethodSignature() + ", startLoc = (bcidx:" + deletionCBB.startLoc.insnBcIndex + ",bcpos:" + deletionCBB.startLoc.insnBcPos + "), endLoc = (bcidx:" + deletionCBB.endLoc.insnBcIndex + ",bcpos:" + deletionCBB.endLoc.insnBcPos + ")");
+		
+			// update the JPF configuration to reflect the directory that contains the generated modified version of the subject program (without "modified code fragment")
+
+			Config jpfConfigFullDeletion = (Config) jpfConfigFull.clone();
+
+			jpfConfigFullDeletion.setProperty("classpath", ".," + genVersionsPathUniqueStr + File.separator + "stripped");
+	
+			checkFullProgramByJPF(jpfConfigFullDeletion, walaCtx, fullExpStats);
+
+
+			// original program version (current affected "modified code fragment" is present, simulating addition)
+
+			System.out.println("[LOG] checking original program version (current affected code fragment is present, simulating addition)");
+			System.out.println("[LOG] additionCBB: methodSig = " + additionCBB.getMethodSignature() + ", startLoc = (bcidx:" + additionCBB.startLoc.insnBcIndex + ",bcpos:" + additionCBB.startLoc.insnBcPos + "), endLoc = (bcidx:" + additionCBB.endLoc.insnBcIndex + ",bcpos:" + additionCBB.endLoc.insnBcPos + ")");
+
+			// update the JPF configuration to reflect the directory that contains the received original version of the subject program (with "modified code fragment")
+	
+			Config jpfConfigFullAddition = (Config) jpfConfigFull.clone();
+
+			jpfConfigFullAddition.setProperty("classpath", ".," + targetClassPathStr);
+	
+			checkFullProgramByJPF(jpfConfigFullAddition, walaCtx, fullExpStats);
 		}
 
-		long totalSumRunningTimeOverCodeFragments = 0;
-		for (Long rt : expStats.getSumRunningTimesForCodeFragments()) totalSumRunningTimeOverCodeFragments += rt.longValue();
-		long avgRunningTimeOverCodeFragments = totalSumRunningTimeOverCodeFragments / expStats.getNumberOfProcessedCodeFragments();
+		long incrAvgRunningTimeOverCodeFragments = computeAverageOverRunningTimes(incrExpStats.getSumRunningTimesForThreadPairsOverCodeFragments());
+		double incrStddevRunningTimeOverCodeFragments = computeStandardDeviationOverRunningTimes(incrExpStats.getSumRunningTimesForThreadPairsOverCodeFragments(), incrAvgRunningTimeOverCodeFragments);
 
 		System.out.print("\n\n");
-		System.out.println("[JPF SUMMARY] total runs over thread pairs = " + expStats.getTotalCountOfRunsOverThreadPairs() + ", timedout runs over thread pairs = " + expStats.getCountOfTimedoutRunsOverThreadPairs() + ", average running time over modified code fragments = " + avgRunningTimeOverCodeFragments + " s \n");
+		System.out.println("[JPF SUMMARY] incremental verification: total runs over thread pairs = " + incrExpStats.getTotalCountOfRunsOverThreadPairs() + ", timedout runs over thread pairs = " + incrExpStats.getCountOfTimedoutRunsOverThreadPairs() + ", failed runs over thread pairs = " + incrExpStats.getCountOfFailedRuns() + ", average running time over modified code fragments = " + incrAvgRunningTimeOverCodeFragments + " ms, standard deviation for running time over modified code fragments = " + incrStddevRunningTimeOverCodeFragments + " ms \n");
+	
+		long fullAvgRunningTimeOverCodeFragments = computeAverageOverRunningTimes(fullExpStats.getSumRunningTimesForAllThreadsOverCodeFragments());
+		double fullStddevRunningTimeOverCodeFragments = computeStandardDeviationOverRunningTimes(fullExpStats.getSumRunningTimesForAllThreadsOverCodeFragments(), fullAvgRunningTimeOverCodeFragments);
+
+		System.out.print("\n\n");
+		System.out.println("[JPF SUMMARY] full verification: total runs over all threads = " + fullExpStats.getTotalCountOfRunsOverAllThreads() + ", timedout runs over all threads = " + fullExpStats.getCountOfTimedoutRunsOverAllThreads() + ", failed runs over all threads = " + fullExpStats.getCountOfFailedRuns() + ", average running time over modified code fragments = " + fullAvgRunningTimeOverCodeFragments + " ms, standard deviation for running time over modified code fragments = " + fullStddevRunningTimeOverCodeFragments + " ms \n");
 	}
 
 	private static Set<CodeBlockBoundary> determineAffectedCodeBlocksForInterferingActions(WALAContext walaCtx, String mainClassName, String targetClassPath, String walaExclusionFilePath) throws Exception
@@ -406,18 +457,22 @@ public class Main
 		int newGlobalMaxThreadID = oldGlobalMaxThreadID;
 
 		String modifiedThreadEntryMethodSig = null;
+	
+		MemoryConstrainedJPF memConstr = null;
 
 		Date jpfStartTime = new Date();
 
+		JPF jpf = new JPF(jpfConfig);
+
 		try
 		{
-			JPF jpf = new JPF(jpfConfig);
-
 			// we use the listener ThreadExecutionMonitor to record thread IDs and determine the maximum possible dynamic thread ID
 				// parameters: ID of the modified thread, boundaries of the modified code fragment (two program points)
 			ThreadExecutionMonitor thExecMon = new ThreadExecutionMonitor(jpfConfig, modifiedThreadID, modifiedCBB);
 
 			jpf.addListener(thExecMon);
+
+			jpf.addListener(new ErrorInfoPrinter("INCR VERIF ERROR"));
 
 			jpf.run();
 
@@ -425,6 +480,10 @@ public class Main
 			newGlobalMaxThreadID = thExecMon.getMaxThreadID();
 		
 			modifiedThreadEntryMethodSig = thExecMon.getModifiedThreadEntryMethodSig();
+
+			memConstr = jpf.getListenerOfType(MemoryConstrainedJPF.class);
+
+			if (memConstr.isLimitReached()) expStats.incCountOfFailedRuns();
 		}
 		catch (Exception ex)
 		{
@@ -435,10 +494,11 @@ public class Main
 
 		Date jpfFinishTime = new Date();
 
-		long jpfUsedTimeInSec = computeTimeDiff(jpfStartTime, jpfFinishTime);
+		long jpfUsedTimeInMS = computeTimeDiffInMS(jpfStartTime, jpfFinishTime);
+		long jpfUsedTimeInSec = computeTimeDiffInSec(jpfStartTime, jpfFinishTime);
 
-		System.out.println("[JPF] time = " + jpfUsedTimeInSec + " s \n");
-
+		System.out.println("[JPF] time = " + jpfUsedTimeInMS + " ms \n");
+	
 		try
 		{
 			// we need to ignore all JPF runs where the modified code fragment is actually not reachable in the call graph from the entry method of a thread marked as modified (through ID)
@@ -447,13 +507,13 @@ public class Main
 			{
 				expStats.incTotalCountOfRunsOverThreadPairs();
 
-				if (jpfUsedTimeInSec >= TIME_LIMIT_SEC)
+				if (jpfUsedTimeInSec >= TIME_LIMIT_SEC_INCR)
 				{
 					expStats.incCountOfTimedoutRunsOverThreadPairs();
 				}
-				else
+				else if ( ! memConstr.isLimitReached() )
 				{
-					expStats.addRunningTimeForThreadPair(jpfUsedTimeInSec);
+					expStats.addRunningTimeForThreadPair(jpfUsedTimeInMS);
 				}
 			}
 		}
@@ -464,8 +524,64 @@ public class Main
 			if (ex.getCause() != null) ex.getCause().printStackTrace();
 		}
 
+		System.gc();
 
 		return newGlobalMaxThreadID;
+	}
+
+	private static void checkFullProgramByJPF(Config jpfConfig, WALAContext walaCtx, ExperimentsStats expStats)
+	{
+		MemoryConstrainedJPF memConstr = null;
+
+		Date jpfStartTime = new Date();
+	
+		JPF jpf = new JPF(jpfConfig);
+
+		try
+		{
+			jpf.addListener(new ErrorInfoPrinter("FULL VERIF ERROR"));
+
+			jpf.run();
+		
+			memConstr = jpf.getListenerOfType(MemoryConstrainedJPF.class);
+
+			if (memConstr.isLimitReached()) expStats.incCountOfFailedRuns();
+		}
+		catch (Exception ex)
+		{
+			System.err.println("[ERROR] cannot start JPF");
+			ex.printStackTrace();
+			if (ex.getCause() != null) ex.getCause().printStackTrace();
+		}
+
+		Date jpfFinishTime = new Date();
+
+		long jpfUsedTimeInMS = computeTimeDiffInMS(jpfStartTime, jpfFinishTime);
+		long jpfUsedTimeInSec = computeTimeDiffInSec(jpfStartTime, jpfFinishTime);
+
+		System.out.println("[JPF] time = " + jpfUsedTimeInMS + " ms \n");
+
+		try
+		{
+			expStats.incTotalCountOfRunsOverAllThreads();
+
+			if (jpfUsedTimeInSec >= TIME_LIMIT_SEC_FULL)
+			{
+				expStats.incCountOfTimedoutRunsOverAllThreads();
+			}
+			else if ( ! memConstr.isLimitReached() )
+			{
+				expStats.addRunningTimeForAllThreads(jpfUsedTimeInMS);
+			}
+		}
+		catch (Exception ex)
+		{
+			System.err.println("[ERROR] cannot process results of JPF");
+			ex.printStackTrace();
+			if (ex.getCause() != null) ex.getCause().printStackTrace();
+		}
+
+		System.gc();
 	}
 
 	private static CodeBlockBoundary findLeastWrappingCBB(CodeBlockBoundary inputCBB, Set<CodeBlockBoundary> candidateCBBs, WALAContext walaCtx) throws Exception
@@ -514,50 +630,103 @@ public class Main
 
 		return wrapperCBB;
 	}
-
-	private static long computeTimeDiff(Date start, Date finish)
+	
+	private static long computeTimeDiffInMS(Date start, Date finish)
 	{
 		long startMS = start.getTime();
 		long finishMS = finish.getTime();
 	
 		long diffMS = finishMS - startMS;
     	
+		return diffMS;
+	}
+
+	private static long computeTimeDiffInSec(Date start, Date finish)
+	{
+		long diffMS = computeTimeDiffInMS(start, finish);
+    	
 		long diffSeconds = (diffMS / 1000);
     	
 		return diffSeconds;
 	}
 	
-	private static String printTimeDiff(Date start, Date finish)
+	private static long computeAverageOverRunningTimes(List<Long> runningTimes)
 	{
-		long diff = computeTimeDiff(start, finish);
-		return String.valueOf(diff);
+		long totalSumRunningTimes = 0;
+
+		for (Long rt : runningTimes) totalSumRunningTimes += rt.longValue();
+
+		long avgRunningTime = totalSumRunningTimes / runningTimes.size();
+
+		return avgRunningTime;
+	}
+	
+	private static double computeStandardDeviationOverRunningTimes(List<Long> runningTimes, long avgRunningTime)
+	{
+		long[] sqrDiffAvg = new long[runningTimes.size()];
+
+		for (int i = 0; i < runningTimes.size(); i++)
+		{
+			long rt = runningTimes.get(i);
+
+			sqrDiffAvg[i] = (rt - avgRunningTime) * (rt - avgRunningTime);
+		}
+
+		long sumSqrDiff = 0;
+		for (int i = 0; i < runningTimes.size(); i++) sumSqrDiff += sqrDiffAvg[i];
+		long avgSqrDiff = sumSqrDiff / runningTimes.size();
+
+		return Math.sqrt(avgSqrDiff);
 	}
 
 
 	static class ExperimentsStats
 	{
-		private long sumRunningTimesOverPairsForCurrentFragment = -1;
-		private List<Long> allRunningTimesOverFragments = new ArrayList<Long>();
 		private int totalNumProcessedCodeFragments = 0;
+
+		private long sumRunningTimesOverThreadPairsForCurrentFragment = -1;
+		private List<Long> allRunningTimesForThreadPairsOverFragments = new ArrayList<Long>();
+		
 		private int totalCountRunsOverThreadPairs = 0;
 		private int countTimedoutRunsOverThreadPairs = 0;
+	
+		private long sumRunningTimesOverAllThreadsForCurrentFragment = -1;
+		private List<Long> allRunningTimesForAllThreadsOverFragments = new ArrayList<Long>();
+	
+		private int totalCountRunsOverAllThreads = 0;
+		private int countTimedoutRunsOverAllThreads = 0;
+
+		private int totalCountFailedRuns = 0;
 
 
 		public void initForNewCodeFragment()
 		{
-			if (sumRunningTimesOverPairsForCurrentFragment != -1)
+			if (sumRunningTimesOverThreadPairsForCurrentFragment != -1)
 			{
-				allRunningTimesOverFragments.add(sumRunningTimesOverPairsForCurrentFragment);
+				allRunningTimesForThreadPairsOverFragments.add(sumRunningTimesOverThreadPairsForCurrentFragment);
 			}
 	
-			sumRunningTimesOverPairsForCurrentFragment = 0;
+			sumRunningTimesOverThreadPairsForCurrentFragment = 0;
+		
+			if (sumRunningTimesOverAllThreadsForCurrentFragment != -1)
+			{
+				allRunningTimesForAllThreadsOverFragments.add(sumRunningTimesOverAllThreadsForCurrentFragment);
+			}
+	
+			sumRunningTimesOverAllThreadsForCurrentFragment = 0;
+
 		}
 		
-		public List<Long> getSumRunningTimesForCodeFragments()
+		public List<Long> getSumRunningTimesForThreadPairsOverCodeFragments()
 		{
-			return allRunningTimesOverFragments;
+			return allRunningTimesForThreadPairsOverFragments;
 		}
-	
+		
+		public List<Long> getSumRunningTimesForAllThreadsOverCodeFragments()
+		{
+			return allRunningTimesForAllThreadsOverFragments;
+		}
+
 		public int getNumberOfProcessedCodeFragments()
 		{
 			return totalNumProcessedCodeFragments;
@@ -588,12 +757,50 @@ public class Main
 			countTimedoutRunsOverThreadPairs += 1;
 		}
 
+		public int getTotalCountOfRunsOverAllThreads()
+		{
+			return totalCountRunsOverAllThreads;
+		}
+
+		public int getCountOfTimedoutRunsOverAllThreads()
+		{
+			return countTimedoutRunsOverAllThreads;
+		}
+	
+		public void incTotalCountOfRunsOverAllThreads()
+		{
+			totalCountRunsOverAllThreads += 1;
+		}
+
+		public void incCountOfTimedoutRunsOverAllThreads()
+		{
+			countTimedoutRunsOverAllThreads += 1;
+		}
+
 		public void addRunningTimeForThreadPair(long rt)
 		{
-			// if the actual running time is 0 (e.g., several miliseconds) then we report 1 second
+			// if the actual running time is 0 (e.g., several microseconds) then we report 1 millisecond
 			if (rt == 0) rt = 1;
 
-			sumRunningTimesOverPairsForCurrentFragment += rt;
+			sumRunningTimesOverThreadPairsForCurrentFragment += rt;
+		}
+		
+		public void addRunningTimeForAllThreads(long rt)
+		{
+			// if the actual running time is 0 (e.g., several microseconds) then we report 1 millisecond
+			if (rt == 0) rt = 1;
+
+			sumRunningTimesOverAllThreadsForCurrentFragment += rt;
+		}
+	
+		public int getCountOfFailedRuns()
+		{
+			return totalCountFailedRuns;
+		}
+	
+		public void incCountOfFailedRuns()
+		{
+			totalCountFailedRuns += 1;
 		}
 	}
 

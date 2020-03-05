@@ -33,12 +33,13 @@ class Controls {
     // this is called to inform the control object of an up call on floor
     // onFloor
     public void pushUp(int onFloor, int toFloor) {
-        synchronized(floors[onFloor]) {
+		// INJECTED ERROR
+        //synchronized(floors[onFloor]) {
             //System.out.println("*** Someone on floor " + onFloor + " wants to go to " + toFloor);
             floors[onFloor].upPeople.addElement(new Integer(toFloor));
             if(floors[onFloor].upPeople.size() == 1)
                 floors[onFloor].upFlag = false;
-        }
+        //}
     }
 
     // An elevator calls this if it wants to claim an up call
@@ -78,11 +79,12 @@ class Controls {
     // floor, checkUp() will return false.  This prevents an elevator from
     // wasting its time trying to claim a call that has already been claimed
     public boolean checkUp(int floor) {
-        synchronized(floors[floor]) {  // DONE
+		// INJECTED ERROR
+        //synchronized(floors[floor]) {  // DONE
             boolean ret = floors[floor].upPeople.size() != 0; // DONE
             ret = ret && !floors[floor].upFlag; // DONE
             return ret;
-        }
+        //}
     }
 
     // An elevator calls this to see if a down call has occured on the given

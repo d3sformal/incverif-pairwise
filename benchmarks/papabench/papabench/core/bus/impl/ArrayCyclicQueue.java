@@ -58,7 +58,8 @@ public class ArrayCyclicQueue /* implements Queue */ {
 		}
 	}
 	
-	public synchronized boolean isEmpty() {
+	// INJECTED ERROR
+	public /*synchronized*/ boolean isEmpty() {
 		return this.queueSize == 0;
 	}
 }

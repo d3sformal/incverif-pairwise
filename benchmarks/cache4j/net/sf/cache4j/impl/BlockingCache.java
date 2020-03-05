@@ -69,9 +69,10 @@ public class BlockingCache implements Cache, ManagedCache {
             co.setObject(obj);
             co.setObjectSize(objSize);
 
-            synchronized(this) {
+			// INJECTED ERROR
+            //synchronized(this) {
                 _memorySize = _memorySize + objSize;
-            }
+            //}
 
             tmapPut(co);
         } finally {

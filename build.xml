@@ -108,7 +108,7 @@
 				<arg value="+classpath=.,${build.benchmarks.dir}"/>
 				<arg value="+site=./site.properties"/>
 				<arg value="${config.jpf.dir}/@{appname}.jpf"/>
-				<jvmarg value="-Xmx8g"/>
+				<jvmarg value="-Xmx16g"/>
 				<jvmarg value="-Xss32m"/>
 				<sysproperty key="WALA_HOME" value="."/>
 				<classpath refid="classpath.run"/>
