@@ -81,7 +81,7 @@ public class Main
 		// load the part of configuration specified in build.xml
 		Config jpfConfigBase = JPF.createConfig(cmdArgs);
 
-		jpfConfigBase.setProperty("listener", "gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
+		jpfConfigBase.setProperty("listener", "cz.cuni.mff.d3s.incverif.pairwise.DynamicHappensBeforeOrdering,gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
 		jpfConfigBase.setProperty("race.exclude", "");
 		jpfConfigBase.setProperty("jpf.max_memory_limit", "10240");
 		jpfConfigBase.setProperty("jpf.free_memory_limit", "1024");
