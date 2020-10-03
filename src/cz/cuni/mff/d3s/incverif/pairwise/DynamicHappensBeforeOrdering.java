@@ -51,7 +51,11 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 
 	public void executeInstruction(VM vm, ThreadInfo ti, Instruction insn)
 	{
-		if (ti.isFirstStepInsn()) curTr.threadId = ti.getId();
+		if (ti.isFirstStepInsn())
+		{
+			curTr.threadId = ti.getId();
+			return;
+		}
 
 		EventInfo ev = null;
 
@@ -108,14 +112,16 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 		if (insn instanceof ReturnInstruction)
 		{
 			ReturnInstruction retInsn = (ReturnInstruction) insn;
-			
-			if (retInsn.getMethodInfo().isSynchronized())
+		
+			MethodInfo tgtMethod = retInsn.getMethodInfo();
+		
+			if (tgtMethod.isSynchronized())
 			{
 				int targetObjRef = -1;
 				
-				if (retInsn.getMethodInfo().isStatic())
+				if (tgtMethod.isStatic())
 				{
-					targetObjRef = retInsn.getMethodInfo().getClassInfo().getClassObjectRef();	
+					targetObjRef = tgtMethod.getClassInfo().getClassObjectRef();	
 				}
 				else
 				{
