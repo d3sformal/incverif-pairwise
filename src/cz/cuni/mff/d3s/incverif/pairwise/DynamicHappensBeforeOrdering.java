@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Stack;
 import java.util.Collections;
+import java.util.Iterator;
 
 import gov.nasa.jpf.JPF;
 import gov.nasa.jpf.Config;
@@ -26,6 +27,7 @@ import gov.nasa.jpf.ListenerAdapter;
 import gov.nasa.jpf.search.Search;
 import gov.nasa.jpf.vm.VM;
 import gov.nasa.jpf.vm.ThreadInfo;
+import gov.nasa.jpf.vm.MethodInfo;
 import gov.nasa.jpf.vm.ClassInfo;
 import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.vm.bytecode.ReturnInstruction;
@@ -65,7 +67,11 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 			
 			int targetObjRef = ti.getTopFrame().peek();
 
-			ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef);
+			ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef, insn);
+
+			dropAllEventsForThread(ti.getId());
+
+			dropAllEventsPrecedingLockReleaseForOtherThreads(ti.getId(), targetObjRef, vm);
 		}
 
 		if (insn instanceof MONITOREXIT)
@@ -74,7 +80,7 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 			
 			int targetObjRef = ti.getTopFrame().peek();
 			
-			ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef);
+			ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef, insn);
 		}
 
 		if (insn instanceof JVMInvokeInstruction)
@@ -100,12 +106,20 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 
 			if (tgtMthName.equals("join") && isThreadClass(tgtMthCI))
 			{
-				ev = new EventInfo(EventType.TJOIN, ti.getId(), targetObjRef);
+				ev = new EventInfo(EventType.TJOIN, ti.getId(), targetObjRef, insn);
+			
+				int targetThID = vm.getThreadList().getThreadInfoForObjRef(targetObjRef).getId(); 
+
+				dropAllEventsForThread(targetThID);
 			}
 
 			if (tgtMethod.isSynchronized())
 			{
-				ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef);
+				ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef, insn);
+
+				dropAllEventsForThread(ti.getId());
+
+				dropAllEventsPrecedingLockReleaseForOtherThreads(ti.getId(), targetObjRef, vm);
 			}
 		}
 
@@ -128,7 +142,7 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 					targetObjRef = ti.getThis();
 				}
 
-				ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef);
+				ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef, insn);
 			}
 		}
 
@@ -169,6 +183,105 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 		curPathTrs.pop();
 	}
 
+	private void dropAllEventsForThread(int tgtThID)
+	{
+		// remove all events associated with the given thread ID
+
+		Iterator<TransitionInfo> cpTrIt = curPathTrs.iterator();
+		while (cpTrIt.hasNext())
+		{
+			TransitionInfo tr = cpTrIt.next();
+
+			Iterator<EventInfo> trEvIt = tr.events.iterator();
+			while (trEvIt.hasNext())
+			{
+				EventInfo ev = trEvIt.next();
+
+				if (ev.threadID == tgtThID) trEvIt.remove();
+			}
+		}
+	
+		Iterator<EventInfo> ctEvIt = curTr.events.iterator();
+		while (ctEvIt.hasNext())
+		{
+			EventInfo ev = ctEvIt.next();
+
+			if (ev.threadID == tgtThID) ctEvIt.remove();
+		}
+	}
+
+	private void dropAllEventsPrecedingLockReleaseForOtherThreads(int tgtThID, int lockObjRef, VM vm)
+	{
+		// for each thread T other than the input thread (ID), find the most recent "lock release" event by thread T on the same lock object, and then drop the "lock release" event and all events by the same thread T that precede it
+
+		for (ThreadInfo curTh : vm.getThreadList())
+		{
+			// skip the given thread
+			if (curTh.getId() == tgtThID) continue;
+
+			boolean foundLockRelease = false;
+
+			foundLockRelease = findLockReleaseAndRemovePrecedingEventsByThread(curTr, curTh.getId(), lockObjRef);
+
+			Iterator<TransitionInfo> cpTrIt = curPathTrs.iterator();
+			while (cpTrIt.hasNext())
+			{
+				TransitionInfo tr = cpTrIt.next();
+
+				if (foundLockRelease)
+				{
+					// we can safely drop all events for a given thread in this transition, because lock release was found in a subsequent transition
+
+					Iterator<EventInfo> trEvIt = tr.events.iterator();
+					while (trEvIt.hasNext())
+					{
+						EventInfo ev = trEvIt.next();
+
+						if (ev.threadID == curTh.getId()) trEvIt.remove();
+					}
+				}
+				else
+				{
+					foundLockRelease = findLockReleaseAndRemovePrecedingEventsByThread(tr, curTh.getId(), lockObjRef);
+				}
+			}
+		}
+	}
+
+	private boolean findLockReleaseAndRemovePrecedingEventsByThread(TransitionInfo inputTr, int tgtThID, int lockObjRef)
+	{
+		boolean found = false;
+
+		for (int i = inputTr.events.size() - 1; i >= 0; i--)
+		{
+			EventInfo trEv = inputTr.events.get(i);
+
+			if (trEv.type == EventType.UNLOCK)
+			{
+				if ( (trEv.threadID == tgtThID) && (trEv.tgtObjectID == lockObjRef) )
+				{
+					found = true;
+
+					// loop just over preceding events in the given transition
+					Iterator<EventInfo> trPrecEvIt = inputTr.events.iterator();
+					while (trPrecEvIt.hasNext())
+					{
+						EventInfo precEv = trPrecEvIt.next();
+
+						if (precEv.threadID == tgtThID) trPrecEvIt.remove();
+	
+						// we reached the lock release action
+						if (precEv == trEv) break;
+					}
+
+					break;
+				}
+			}
+		}
+
+		return found;
+	}
+
 
 	static enum EventType
 	{
@@ -186,12 +299,17 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 		// lock object for acquire/release
 		// thread object for join
 		public int tgtObjectID;
+
+		// corresponding Java bytecode instruction
+		// needed for data about code location
+		public Instruction corrInsn;
 	
-		public EventInfo(EventType et, int thID, int toID)
+		public EventInfo(EventType et, int thID, int toID, Instruction ci)
 		{
 			type = et;
 			threadID = thID;
 			tgtObjectID = toID;
+			corrInsn = ci;
 		}
 	}
 	
