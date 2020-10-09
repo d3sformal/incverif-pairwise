@@ -156,13 +156,13 @@ public class DynamicThreadChoice extends ThreadChoiceFromSet
 		ThreadInfo[] enabledThreadObjs = new ThreadInfo[enabledThsCount];
 		int pos = 0;
 
-		for (int i = 0; i < values.length; i++)
+		for (int i = 0; i < enabledThsCount; i++)
 		{
-			for (int j = 0; j < enabledThsCount; j++)
+			for (int j = 0; j < values.length; j++)
 			{
-				if (values[i].getId() == enabledThreads[j])
+				if (enabledThreads[i] == values[j].getId())
 				{
-					enabledThreadObjs[pos++] = values[i];
+					enabledThreadObjs[pos++] = values[j];
 					break;
 				}
 			}
