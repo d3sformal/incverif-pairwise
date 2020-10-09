@@ -282,6 +282,20 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 		return found;
 	}
 
+	public List<EventInfo> getAllEvents()
+	{
+		List<EventInfo> allEvents = new ArrayList<EventInfo>();
+
+		for (TransitionInfo tr : curPathTrs)
+		{
+			allEvents.addAll(tr.events);
+		}
+
+		allEvents.addAll(curTr.events);
+
+		return allEvents;
+	}
+
 
 	static enum EventType
 	{

@@ -15,6 +15,7 @@
  */
 package cz.cuni.mff.d3s.incverif.pairwise;
 
+import java.util.List;
 import java.util.Stack;
 
 import gov.nasa.jpf.Config;
@@ -38,6 +39,9 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 	// encapsulates two program code locations (points) that represent boundaries of the modified code
 	private CodeBlockBoundary modifiedCodeBoundary;
 
+	// other thread forming the given pair
+	private int thOtherID;
+
 	// current transition
 	// includes the current execution state of thread with modified code
 	private TransitionInfo curTr;
@@ -52,12 +56,14 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 	private String thModifiedEntryMethodSig;
 
 
-	public ThreadExecutionMonitor(Config cfg, int tmid, CodeBlockBoundary mcbb)
+	public ThreadExecutionMonitor(Config cfg, int tmid, CodeBlockBoundary mcbb, int toid)
 	{
 		this.config = cfg;
 
 		this.thModifiedID = tmid;
 		this.modifiedCodeBoundary = mcbb;
+
+		this.thOtherID = toid;
 
 		this.curTraceTrs = new Stack<TransitionInfo>();
 
@@ -127,6 +133,8 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 
 				curTr.state = ExecState.ENTERING;
 
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
+
 				return;
 			}
 			
@@ -136,6 +144,8 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): before first (" + ExecState.BEFOREFIRST.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.INSIDE;
+
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
 
 				return;
 			}
@@ -194,6 +204,8 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): outside (" + ExecState.OUTSIDE.ordinal() + ") -> entering (" + ExecState.ENTERING.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.ENTERING;
+	
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
 
 				return;
 			}
@@ -204,6 +216,8 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): outside (" + ExecState.OUTSIDE.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.INSIDE;
+
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
 
 				return;
 			}
@@ -253,6 +267,74 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 	public boolean outsideModifiedCode()
 	{
 		return curTr.state == ExecState.OUTSIDE;
+	}
+
+	private void enableThreadChoicesForPossiblyConcurrentEvents(ThreadInfo curTh, Instruction curPC, VM vm)
+	{
+		DynamicHappensBeforeOrdering listenerDynHBO = vm.getJPF().getListenerOfType(DynamicHappensBeforeOrdering.class);
+
+		List<DynamicHappensBeforeOrdering.EventInfo> events = listenerDynHBO.getAllEvents();
+
+		DynamicThreadChoice[] choices = vm.getChoiceGeneratorsOfType(DynamicThreadChoice.class);
+		int curThChoicePos = 0;
+
+		// loop over all relevant events that are not guaranteed to happen strictly before the beginning of the modified code segment
+		for (DynamicHappensBeforeOrdering.EventInfo hboEv : events)
+		{
+			DynamicThreadChoice matchingDynChoice = null;
+
+			// search for the matching dynamic thread choice for the current event based on code location
+			while (matchingDynChoice == null)
+			{
+				DynamicThreadChoice curDynThChoice = choices[curThChoicePos];
+
+				// we have the same thread
+				if (hboEv.threadID == curDynThChoice.curThID)
+				{
+					// we have the same method
+					if (hboEv.corrInsn.getMethodInfo().getFullName().equals(curDynThChoice.assocInsn.getMethodInfo().getFullName()))
+					{
+						// we have the same bytecode instruction
+						if (hboEv.corrInsn.getPosition() == curDynThChoice.assocInsn.getPosition())
+						{
+							matchingDynChoice = curDynThChoice;
+							break;
+						}
+					}
+				}
+
+				curThChoicePos++;
+			}
+
+			if (matchingDynChoice != null)
+			{
+				// for each relevant dynamic thread choice, we need to make sure there are at least two enabled threads and that one of them is the current thread that executes the matching event
+
+				matchingDynChoice.enableThread(hboEv.threadID);
+
+				// try other threads in this order: modified, other, runnable
+
+				if ((matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && vm.getThreadList().getThreadInfoForId(thModifiedID).isTimeoutRunnable())
+				{
+					matchingDynChoice.enableThread(thModifiedID);
+				}
+
+				if ((matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && vm.getThreadList().getThreadInfoForId(thOtherID).isTimeoutRunnable())
+				{
+					matchingDynChoice.enableThread(thOtherID);
+				}
+
+				ThreadInfo[] runnableThreads = vm.getThreadList().getTimeoutRunnables();
+				int runThIdx = 0;
+
+				while ( (matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && (runThIdx < runnableThreads.length) )
+				{
+					matchingDynChoice.enableThread(runnableThreads[runThIdx].getId());
+
+					runThIdx++;
+				}
+			}
+		}
 	}
 
 

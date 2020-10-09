@@ -47,7 +47,7 @@ public class PairwiseSharednessPolicy extends PathSharednessPolicy
 		super.initializeSharednessPolicy(vm, appCtx);	
 	}
 
-	protected ThreadInfo[] getRunnables(ApplicationContext appCtx)
+	protected ThreadInfo[] getFilteredRunnables(ApplicationContext appCtx)
 	{
 		ThreadInfo[] originalThArray = super.getRunnables(appCtx);
 
@@ -58,6 +58,26 @@ public class PairwiseSharednessPolicy extends PathSharednessPolicy
 		//System.out.println("[DEBUG PP] SharednessPolicy: originalThArray = " + java.util.Arrays.toString(originalThArray) + ", thModifiedID = " + thModifiedID + ", thOtherID = " + thOtherID + ", filteredThArray = " + java.util.Arrays.toString(filteredThArray));
 
 		return filteredThArray;
+	}
+
+	protected ChoiceGenerator<ThreadInfo> getRunnableCG(String id, ThreadInfo curTh)
+	{
+		// no CG if we are in a atomic section
+		if (vm.getSystemState().isAtomic()) return null;
+
+		ThreadInfo[] originalRunThSet = super.getRunnables(curTh.getApplicationContext());
+
+		// field access does not block, i.e. the current thread is always runnable
+		if (originalRunThSet.length <= 1) return null;
+
+		ThreadInfo[] filteredRunThSet = getFilteredRunnables(curTh.getApplicationContext());
+
+		DynamicThreadChoice cg = new DynamicThreadChoice(originalRunThSet, curTh, curTh.getPC());
+
+		// we have to enable threads filtered according to our pairwise search algorithm
+		cg.enableThreads(filteredRunThSet);
+
+		return cg;
 	}
 }
 

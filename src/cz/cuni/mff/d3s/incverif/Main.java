@@ -300,7 +300,7 @@ public class Main
 
 					jpfConfigIncrDeletion.setProperty("classpath", ".," + genVersionsPathUniqueStr + File.separator + "stripped");
 	
-					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigIncrDeletion, globalMaxThreadID, outerLoopThreadID, deletionCBB, walaCtx, incrExpStats);
+					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigIncrDeletion, globalMaxThreadID, outerLoopThreadID, deletionCBB, innerLoopThreadID, walaCtx, incrExpStats);
 
 					// original program version (current affected "modified code fragment" is present, simulating addition)
 
@@ -313,7 +313,7 @@ public class Main
 
 					jpfConfigIncrAddition.setProperty("classpath", ".," + targetClassPathStr);
 	
-					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigIncrAddition, globalMaxThreadID, outerLoopThreadID, additionCBB, walaCtx, incrExpStats);
+					globalMaxThreadID = checkProgramVersionByJPF(jpfConfigIncrAddition, globalMaxThreadID, outerLoopThreadID, additionCBB, innerLoopThreadID, walaCtx, incrExpStats);
 
 					// prepare for the next iteration of the inner loop
 
@@ -452,7 +452,7 @@ public class Main
 		return codeBlocks;
 	}
 
-	private static int checkProgramVersionByJPF(Config jpfConfig, int oldGlobalMaxThreadID, int modifiedThreadID, CodeBlockBoundary modifiedCBB, WALAContext walaCtx, ExperimentsStats expStats)
+	private static int checkProgramVersionByJPF(Config jpfConfig, int oldGlobalMaxThreadID, int modifiedThreadID, CodeBlockBoundary modifiedCBB, int otherThreadID, WALAContext walaCtx, ExperimentsStats expStats)
 	{
 		int newGlobalMaxThreadID = oldGlobalMaxThreadID;
 
@@ -468,7 +468,7 @@ public class Main
 		{
 			// we use the listener ThreadExecutionMonitor to record thread IDs and determine the maximum possible dynamic thread ID
 				// parameters: ID of the modified thread, boundaries of the modified code fragment (two program points)
-			ThreadExecutionMonitor thExecMon = new ThreadExecutionMonitor(jpfConfig, modifiedThreadID, modifiedCBB);
+			ThreadExecutionMonitor thExecMon = new ThreadExecutionMonitor(jpfConfig, modifiedThreadID, modifiedCBB, otherThreadID);
 
 			jpf.addListener(thExecMon);
 

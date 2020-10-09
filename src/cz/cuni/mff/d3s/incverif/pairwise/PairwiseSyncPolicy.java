@@ -48,7 +48,7 @@ public class PairwiseSyncPolicy extends AllRunnablesSyncPolicy
 		super.initializeSyncPolicy(vm, appCtx);
 	}
 
-	protected ThreadInfo[] getTimeoutRunnables(ApplicationContext appCtx)
+	protected ThreadInfo[] getFilteredTimeoutRunnables(ApplicationContext appCtx)
 	{
 		ThreadInfo[] originalThArray = super.getTimeoutRunnables(appCtx);
 
@@ -59,6 +59,35 @@ public class PairwiseSyncPolicy extends AllRunnablesSyncPolicy
 		//System.out.println("[DEBUG PP] SyncPolicy: originalThArray = " + java.util.Arrays.toString(originalThArray) + ", thModifiedID = " + thModifiedID + ", thOtherID = " + thOtherID + ", filteredThArray = " + java.util.Arrays.toString(filteredThArray));
 
 		return filteredThArray;
+	}
+
+	protected ChoiceGenerator<ThreadInfo> getRunnableCG(String id, ThreadInfo curTh)
+	{
+		ApplicationContext appCtx = curTh.getApplicationContext();
+
+		ThreadInfo[] originalRunThSet = super.getTimeoutRunnables(appCtx);
+
+		if (originalRunThSet.length == 0) return null;
+
+		if ( (originalRunThSet.length == 1) && (originalRunThSet[0] == curTh) && ( ! curTh.isTimeoutWaiting() ) )
+		{
+			// no context switch
+			if ( ! breakSingleChoice ) return null;
+		}
+
+		ThreadInfo[] filteredRunThSet = getFilteredTimeoutRunnables(appCtx);
+
+		DynamicThreadChoice cg = new DynamicThreadChoice(originalRunThSet, curTh, curTh.getPC());
+
+		// we have to enable threads filtered according to our pairwise search algorithm
+		cg.enableThreads(filteredRunThSet);
+
+		if ( ! vm.getThreadList().hasProcessTimeoutRunnables(appCtx) )
+		{
+			GlobalSchedulingPoint.setGlobal(cg);
+		}
+
+		return cg;
 	}
 }	
 
