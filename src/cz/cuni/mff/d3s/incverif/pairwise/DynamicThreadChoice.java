@@ -62,12 +62,10 @@ public class DynamicThreadChoice extends ThreadChoiceFromSet
 		curThID = curTh.getId();
 
 		enabledThreads = new int[thSet.length];
-		enabledThreads[0] = curTh.getId();
-		enabledThsCount = 1;
+		enabledThsCount = 0;
 
 		unexploredThreads = new int[thSet.length];
-		unexploredThreads[0] = curTh.getId();
-		unexploredThsCount = 1;
+		unexploredThsCount = 0;
 
 		assocInsn = curPC;
 	}

@@ -467,7 +467,7 @@ public class Main
 		try
 		{
 			// we use the listener ThreadExecutionMonitor to record thread IDs and determine the maximum possible dynamic thread ID
-				// parameters: ID of the modified thread, boundaries of the modified code fragment (two program points)
+				// parameters: ID of the modified thread, boundaries of the modified code fragment (two program points), ID of the other thread
 			ThreadExecutionMonitor thExecMon = new ThreadExecutionMonitor(jpfConfig, modifiedThreadID, modifiedCBB, otherThreadID);
 
 			jpf.addListener(thExecMon);

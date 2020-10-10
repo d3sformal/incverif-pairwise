@@ -310,7 +310,10 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 			{
 				// for each relevant dynamic thread choice, we need to make sure there are at least two enabled threads and that one of them is the current thread that executes the matching event
 
-				matchingDynChoice.enableThread(hboEv.threadID);
+				if (vm.getThreadList().getThreadInfoForId(hboEv.threadID).isTimeoutRunnable())
+				{
+					matchingDynChoice.enableThread(hboEv.threadID);
+				}
 
 				// try other threads in this order: modified, other, runnable
 
