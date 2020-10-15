@@ -51,7 +51,7 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 	}
 
 
-	public void executeInstruction(VM vm, ThreadInfo ti, Instruction insn)
+	public void instructionExecuted(VM vm, ThreadInfo ti, Instruction nextInsn, Instruction execInsn)
 	{
 		if (ti.isFirstStepInsn())
 		{
@@ -61,71 +61,85 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 
 		EventInfo ev = null;
 
-		if (insn instanceof MONITORENTER)
+		if (execInsn instanceof MONITORENTER)
 		{
-			MONITORENTER menInsn = (MONITORENTER) insn;
+			MONITORENTER menInsn = (MONITORENTER) execInsn;
 			
-			int targetObjRef = ti.getTopFrame().peek();
+			int targetObjRef = menInsn.getLastLockRef();
 
-			ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef, insn);
+			ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef, execInsn);
 
 			dropAllEventsForThread(ti.getId());
 
 			dropAllEventsPrecedingLockReleaseForOtherThreads(ti.getId(), targetObjRef, vm);
 		}
 
-		if (insn instanceof MONITOREXIT)
+		if (execInsn instanceof MONITOREXIT)
 		{
-			MONITOREXIT mexInsn = (MONITOREXIT) insn;
+			MONITOREXIT mexInsn = (MONITOREXIT) execInsn;
 			
-			int targetObjRef = ti.getTopFrame().peek();
+			int targetObjRef = mexInsn.getLastLockRef();
 			
-			ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef, insn);
+			ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef, execInsn);
 		}
 
-		if (insn instanceof JVMInvokeInstruction)
+		if (execInsn instanceof JVMInvokeInstruction)
 		{
-			JVMInvokeInstruction invokeInsn = (JVMInvokeInstruction) insn;
+			JVMInvokeInstruction invokeInsn = (JVMInvokeInstruction) execInsn;
 
-			MethodInfo tgtMethod = invokeInsn.getInvokedMethod();
+			MethodInfo tgtMethod = null;
 
-			int targetObjRef = -1; 
+			String tgtMethodSig = invokeInsn.getInvokedMethodClassName() + "." + invokeInsn.getInvokedMethodName();
 
-			if (tgtMethod.isStatic())
+			String tgtMethodNameDesc = tgtMethodSig.substring(tgtMethodSig.lastIndexOf('.') + 1);
+
+			if (execInsn.getMethodInfo().getClassInfo() != null)
 			{
-				targetObjRef = tgtMethod.getClassInfo().getClassObjectRef();
+				ClassInfo tgtMthOwnerClass = execInsn.getMethodInfo().getClassInfo().resolveReferencedClass(invokeInsn.getInvokedMethodClassName());
+
+				tgtMethod = tgtMthOwnerClass.getMethod(tgtMethodNameDesc, true);
 			}
-			else
+
+			if (tgtMethod != null)
 			{
-				targetObjRef = ti.getCalleeThis(invokeInsn.getArgSize());
-			}
+				int targetObjRef = -1; 
 
-			String tgtMthName = tgtMethod.getName();
+				if (tgtMethod.isStatic())
+				{
+					targetObjRef = tgtMethod.getClassInfo().getClassObjectRef();
+				}
+				else
+				{
+					targetObjRef = invokeInsn.getLastObjRef();
+				}
 
-			ClassInfo tgtMthCI = tgtMethod.getClassInfo();
+				String tgtMthName = tgtMethod.getName();
 
-			if (tgtMthName.equals("join") && isThreadClass(tgtMthCI))
-			{
-				ev = new EventInfo(EventType.TJOIN, ti.getId(), targetObjRef, insn);
+				ClassInfo tgtMthCI = tgtMethod.getClassInfo();
+
+				if (tgtMthName.equals("join") && isThreadClass(tgtMthCI))
+				{
+					ev = new EventInfo(EventType.TJOIN, ti.getId(), targetObjRef, execInsn);
 			
-				int targetThID = vm.getThreadList().getThreadInfoForObjRef(targetObjRef).getId(); 
+					int targetThID = vm.getThreadList().getThreadInfoForObjRef(targetObjRef).getId(); 
 
-				dropAllEventsForThread(targetThID);
-			}
+					dropAllEventsForThread(targetThID);
+				}
 
-			if (tgtMethod.isSynchronized())
-			{
-				ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef, insn);
+				if (tgtMethod.isSynchronized())
+				{
+					ev = new EventInfo(EventType.LOCK, ti.getId(), targetObjRef, execInsn);
 
-				dropAllEventsForThread(ti.getId());
+					dropAllEventsForThread(ti.getId());
 
-				dropAllEventsPrecedingLockReleaseForOtherThreads(ti.getId(), targetObjRef, vm);
+					dropAllEventsPrecedingLockReleaseForOtherThreads(ti.getId(), targetObjRef, vm);
+				}
 			}
 		}
 
-		if (insn instanceof ReturnInstruction)
+		if (execInsn instanceof ReturnInstruction)
 		{
-			ReturnInstruction retInsn = (ReturnInstruction) insn;
+			ReturnInstruction retInsn = (ReturnInstruction) execInsn;
 		
 			MethodInfo tgtMethod = retInsn.getMethodInfo();
 		
@@ -142,7 +156,7 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 					targetObjRef = ti.getThis();
 				}
 
-				ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef, insn);
+				ev = new EventInfo(EventType.UNLOCK, ti.getId(), targetObjRef, execInsn);
 			}
 		}
 

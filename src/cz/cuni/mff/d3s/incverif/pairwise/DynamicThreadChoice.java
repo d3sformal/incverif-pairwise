@@ -251,8 +251,15 @@ public class DynamicThreadChoice extends ThreadChoiceFromSet
 			if (enabledThreads[i] == thId) isAlreadyEnabled = true;
 		}
 
+		boolean isAvailable = false;
+	
+		for (int i = 0; i < values.length; i++)
+		{
+			if (values[i].getId() == thId) isAvailable = true;
+		}
+
 		// we do not want to enable some thread twice
-		if ( ! isAlreadyEnabled )
+		if ( ( ! isAlreadyEnabled ) && isAvailable )
 		{
 			enabledThreads[enabledThsCount++] = thId;
 			unexploredThreads[unexploredThsCount++] = thId;
@@ -277,6 +284,21 @@ public class DynamicThreadChoice extends ThreadChoiceFromSet
 
 			enableThread(thId);
 		}
+	}
+
+	public boolean isAvailableThread(int thId)
+	{
+		for (int i = 0; i < values.length; i++)
+		{
+			if (values[i].getId() == thId) return true;
+		}
+
+		return false;
+	}
+
+	public ThreadInfo[] getAvailableThreads()
+	{
+		return values.clone();
 	}
 
 }

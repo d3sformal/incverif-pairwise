@@ -17,6 +17,7 @@ package cz.cuni.mff.d3s.incverif.pairwise;
 
 import java.util.List;
 import java.util.Stack;
+import java.util.Collections;
 
 import gov.nasa.jpf.Config;
 import gov.nasa.jpf.ListenerAdapter;
@@ -112,28 +113,26 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 		curTr = new TransitionInfo(prevTr.state);
 	}
 
-	public void executeInstruction(VM vm, ThreadInfo curTh, Instruction insn)
+	public void instructionExecuted(VM vm, ThreadInfo curTh, Instruction nextInsn, Instruction execInsn)
 	{
 		if (curTh.isFirstStepInsn()) return;
 
 		// we care just about the modified thread
 		if (curTh.getId() != thModifiedID) return;
 
-		Instruction curThPC = curTh.getPC();
+		if ( ! modifiedCodeBoundary.getMethodSignature().equals(execInsn.getMethodInfo().getFullName()) ) return; 
 
-		if ( ! modifiedCodeBoundary.getMethodSignature().equals(curThPC.getMethodInfo().getFullName()) ) return; 
-
-		int thModifiedCurInsnBcPos = curThPC.getPosition();
+		int thModifiedCurInsnBcPos = execInsn.getPosition();
 
 		if (curTr.state == ExecState.BEFOREFIRST)
 		{
 			if (thModifiedCurInsnBcPos == modifiedCodeBoundary.startLoc.insnBcPos)
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): before first (" + ExecState.BEFOREFIRST.ordinal() + ") -> entering (" + ExecState.ENTERING.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): before first (" + ExecState.BEFOREFIRST.ordinal() + ") -> entering (" + ExecState.ENTERING.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.ENTERING;
 
-				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, execInsn, vm);
 
 				return;
 			}
@@ -141,11 +140,11 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 			// this may happen in the case of jumps directly into the bytecode range
 			if ( (thModifiedCurInsnBcPos > modifiedCodeBoundary.startLoc.insnBcPos) && (thModifiedCurInsnBcPos < modifiedCodeBoundary.endLoc.insnBcPos) )
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): before first (" + ExecState.BEFOREFIRST.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): before first (" + ExecState.BEFOREFIRST.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.INSIDE;
 
-				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, execInsn, vm);
 
 				return;
 			}
@@ -155,7 +154,7 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 		{
 			if (thModifiedCurInsnBcPos != modifiedCodeBoundary.startLoc.insnBcPos)
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): entering (" + ExecState.ENTERING.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): entering (" + ExecState.ENTERING.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.INSIDE;
 
@@ -167,7 +166,7 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 		{
 			if (thModifiedCurInsnBcPos == modifiedCodeBoundary.endLoc.insnBcPos)
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): inside (" + ExecState.INSIDE.ordinal() + ") -> exiting (" + ExecState.EXITING.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): inside (" + ExecState.INSIDE.ordinal() + ") -> exiting (" + ExecState.EXITING.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.EXITING;
 
@@ -177,7 +176,7 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 			// this may happen in the case of jumps directly out of the bytecode range
 			if ( (thModifiedCurInsnBcPos > modifiedCodeBoundary.endLoc.insnBcPos) || (thModifiedCurInsnBcPos < modifiedCodeBoundary.startLoc.insnBcPos) )
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): inside (" + ExecState.INSIDE.ordinal() + ") -> outside (" + ExecState.OUTSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): inside (" + ExecState.INSIDE.ordinal() + ") -> outside (" + ExecState.OUTSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.OUTSIDE;
 
@@ -189,7 +188,7 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 		{
 			if (thModifiedCurInsnBcPos != modifiedCodeBoundary.endLoc.insnBcPos)
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): exiting (" + ExecState.EXITING.ordinal() + ") -> outside (" + ExecState.OUTSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): exiting (" + ExecState.EXITING.ordinal() + ") -> outside (" + ExecState.OUTSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.OUTSIDE;
 
@@ -201,11 +200,11 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 		{
 			if (thModifiedCurInsnBcPos == modifiedCodeBoundary.startLoc.insnBcPos)
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): outside (" + ExecState.OUTSIDE.ordinal() + ") -> entering (" + ExecState.ENTERING.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): outside (" + ExecState.OUTSIDE.ordinal() + ") -> entering (" + ExecState.ENTERING.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.ENTERING;
 	
-				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, execInsn, vm);
 
 				return;
 			}
@@ -213,11 +212,11 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 			// this may happen in the case of jumps directly into the bytecode range
 			if ( (thModifiedCurInsnBcPos > modifiedCodeBoundary.startLoc.insnBcPos) && (thModifiedCurInsnBcPos < modifiedCodeBoundary.endLoc.insnBcPos) )
 			{
-				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): outside (" + ExecState.OUTSIDE.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", current PC = " + curThPC.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
+				//System.out.println("[DEBUG PP] ThreadExecutionMonitor (forward insn): outside (" + ExecState.OUTSIDE.ordinal() + ") -> inside (" + ExecState.INSIDE.ordinal() + "), current thread ID = " + curTh.getId() + ", execInsn = " + execInsn.getMethodInfo().getFullName() + ":[bcpos=" + thModifiedCurInsnBcPos + "]");
 
 				curTr.state = ExecState.INSIDE;
 
-				enableThreadChoicesForPossiblyConcurrentEvents(curTh, curThPC, vm);
+				enableThreadChoicesForPossiblyConcurrentEvents(curTh, execInsn, vm);
 
 				return;
 			}
@@ -269,11 +268,13 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 		return curTr.state == ExecState.OUTSIDE;
 	}
 
-	private void enableThreadChoicesForPossiblyConcurrentEvents(ThreadInfo curTh, Instruction curPC, VM vm)
+	private void enableThreadChoicesForPossiblyConcurrentEvents(ThreadInfo curTh, Instruction curInsn, VM vm)
 	{
 		DynamicHappensBeforeOrdering listenerDynHBO = vm.getJPF().getListenerOfType(DynamicHappensBeforeOrdering.class);
 
+		// we need to reverse the list of events because choices are ordered from the last to the first
 		List<DynamicHappensBeforeOrdering.EventInfo> events = listenerDynHBO.getAllEvents();
+		Collections.reverse(events);
 
 		DynamicThreadChoice[] choices = vm.getChoiceGeneratorsOfType(DynamicThreadChoice.class);
 		int curThChoicePos = 0;
@@ -284,7 +285,8 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 			DynamicThreadChoice matchingDynChoice = null;
 
 			// search for the matching dynamic thread choice for the current event based on code location
-			while (matchingDynChoice == null)
+			
+			while ((matchingDynChoice == null) && (curThChoicePos < choices.length))
 			{
 				DynamicThreadChoice curDynThChoice = choices[curThChoicePos];
 
@@ -310,31 +312,34 @@ public class ThreadExecutionMonitor extends ListenerAdapter
 			{
 				// for each relevant dynamic thread choice, we need to make sure there are at least two enabled threads and that one of them is the current thread that executes the matching event
 
-				if (vm.getThreadList().getThreadInfoForId(hboEv.threadID).isTimeoutRunnable())
+				if (matchingDynChoice.isAvailableThread(hboEv.threadID))
 				{
 					matchingDynChoice.enableThread(hboEv.threadID);
 				}
 
 				// try other threads in this order: modified, other, runnable
 
-				if ((matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && vm.getThreadList().getThreadInfoForId(thModifiedID).isTimeoutRunnable())
+				if ((matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && matchingDynChoice.isAvailableThread(thModifiedID))
 				{
 					matchingDynChoice.enableThread(thModifiedID);
 				}
 
-				if ((matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && vm.getThreadList().getThreadInfoForId(thOtherID).isTimeoutRunnable())
+				if (matchingDynChoice.getTotalNumberOfEnabledThreads() < 2)
 				{
-					matchingDynChoice.enableThread(thOtherID);
+					if (matchingDynChoice.isAvailableThread(thOtherID))
+					{
+						matchingDynChoice.enableThread(thOtherID);
+					}
 				}
 
-				ThreadInfo[] runnableThreads = vm.getThreadList().getTimeoutRunnables();
-				int runThIdx = 0;
+				ThreadInfo[] availableThreads = matchingDynChoice.getAvailableThreads();
+				int avThIdx = 0;
 
-				while ( (matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && (runThIdx < runnableThreads.length) )
+				while ( (matchingDynChoice.getTotalNumberOfEnabledThreads() < 2) && (avThIdx < availableThreads.length) )
 				{
-					matchingDynChoice.enableThread(runnableThreads[runThIdx].getId());
+					matchingDynChoice.enableThread(availableThreads[avThIdx].getId());
 
-					runThIdx++;
+					avThIdx++;
 				}
 			}
 		}
