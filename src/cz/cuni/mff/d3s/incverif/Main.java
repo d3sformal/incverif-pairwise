@@ -81,7 +81,7 @@ public class Main
 		// load the part of configuration specified in build.xml
 		Config jpfConfigBase = JPF.createConfig(cmdArgs);
 
-		jpfConfigBase.setProperty("listener", "cz.cuni.mff.d3s.incverif.pairwise.DynamicHappensBeforeOrdering,gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
+		jpfConfigBase.setProperty("listener", "gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
 		jpfConfigBase.setProperty("race.exclude", "");
 		jpfConfigBase.setProperty("jpf.max_memory_limit", "10240");
 		jpfConfigBase.setProperty("jpf.free_memory_limit", "1024");
@@ -272,8 +272,12 @@ public class Main
 						continue;
 					}
 		
+					String origBaseCfgListeners = jpfConfigBase.getProperty("listener");
+	
 					// we have to keep the base configuration intact (since it will be used many times)
 					Config jpfConfigIncr = (Config) jpfConfigBase.clone();
+
+					jpfConfigIncr.setProperty("listener", "cz.cuni.mff.d3s.incverif.pairwise.DynamicHappensBeforeOrdering," + origBaseCfgListeners);
 
 					if (mode.equals("alg1:thpairwise"))
 					{

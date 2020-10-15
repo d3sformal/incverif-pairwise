@@ -35,6 +35,8 @@ import gov.nasa.jpf.jvm.bytecode.MONITORENTER;
 import gov.nasa.jpf.jvm.bytecode.MONITOREXIT;
 import gov.nasa.jpf.jvm.bytecode.JVMInvokeInstruction;
 
+import cz.cuni.mff.d3s.incverif.common.Utils;
+
 
 public class DynamicHappensBeforeOrdering extends ListenerAdapter
 {
@@ -58,6 +60,9 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 			curTr.threadId = ti.getId();
 			return;
 		}
+
+		// we can ignore all events associated with Java standard library methods
+		if (Utils.isJavaStandardLibraryMethod(execInsn.getMethodInfo().getFullName())) return;
 
 		EventInfo ev = null;
 
