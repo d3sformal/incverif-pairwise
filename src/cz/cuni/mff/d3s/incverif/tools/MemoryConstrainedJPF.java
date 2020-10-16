@@ -23,6 +23,8 @@ import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.search.Search;
 
+import gov.nasa.jpf.vm.bytecode.InvokeInstruction;
+
 
 public class MemoryConstrainedJPF extends ListenerAdapter 
 {
@@ -57,6 +59,21 @@ public class MemoryConstrainedJPF extends ListenerAdapter
 			limitReached = true;
 
 			search.terminate();
+		}
+	}
+
+	public void executeInstruction(VM vm, ThreadInfo curTh, Instruction insn)
+	{
+		if (insn instanceof InvokeInstruction)
+		{
+			long curTotalMemoryMB = Runtime.getRuntime().totalMemory() >> 20; // convert to MB
+			long curFreeMemoryMB = Runtime.getRuntime().freeMemory() >> 20; // convert to MB
+
+			if ( (curFreeMemoryMB < freeMemoryLimitMB) && (curTotalMemoryMB > (maxMemoryLimitMB - freeMemoryLimitMB)) )
+			{
+				// enforce new state where the search will be forcibly terminated
+				curTh.breakTransition(true);
+			}
 		}
 	}
 
