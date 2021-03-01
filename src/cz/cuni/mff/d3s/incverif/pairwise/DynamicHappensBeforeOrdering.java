@@ -29,6 +29,7 @@ import gov.nasa.jpf.vm.VM;
 import gov.nasa.jpf.vm.ThreadInfo;
 import gov.nasa.jpf.vm.MethodInfo;
 import gov.nasa.jpf.vm.ClassInfo;
+import gov.nasa.jpf.vm.ElementInfo;
 import gov.nasa.jpf.vm.Instruction;
 import gov.nasa.jpf.vm.bytecode.ReturnInstruction;
 import gov.nasa.jpf.jvm.bytecode.MONITORENTER;
@@ -100,24 +101,37 @@ public class DynamicHappensBeforeOrdering extends ListenerAdapter
 
 			if (execInsn.getMethodInfo().getClassInfo() != null)
 			{
-				ClassInfo tgtMthOwnerClass = execInsn.getMethodInfo().getClassInfo().resolveReferencedClass(invokeInsn.getInvokedMethodClassName());
+				ClassInfo tgtMthDeclOwnerClass = execInsn.getMethodInfo().getClassInfo().resolveReferencedClass(invokeInsn.getInvokedMethodClassName());
 
-				tgtMethod = tgtMthOwnerClass.getMethod(tgtMethodNameDesc, true);
+				// getMethod returns "null" if the desired method is actually declared in a super-interface
+				tgtMethod = tgtMthDeclOwnerClass.getMethod(tgtMethodNameDesc, true);
+			}
+
+			int targetObjRef = -1; 
+
+			if ((tgtMethod != null) && tgtMethod.isStatic())
+			{
+				targetObjRef = tgtMethod.getClassInfo().getClassObjectRef();
+			}
+			else
+			{
+				targetObjRef = invokeInsn.getLastObjRef();
+
+				if ((targetObjRef != -1) && (tgtMethod == null))
+				{
+					ElementInfo tgtMthDynOwnerObj = vm.getHeap().get(targetObjRef);
+
+					if (tgtMthDynOwnerObj != null)
+					{
+						ClassInfo tgtMthDynOwnerClass = tgtMthDynOwnerObj.getClassInfo();
+
+						tgtMethod = tgtMthDynOwnerClass.getMethod(tgtMethodNameDesc, true);
+					}
+				}
 			}
 
 			if (tgtMethod != null)
 			{
-				int targetObjRef = -1; 
-
-				if (tgtMethod.isStatic())
-				{
-					targetObjRef = tgtMethod.getClassInfo().getClassObjectRef();
-				}
-				else
-				{
-					targetObjRef = invokeInsn.getLastObjRef();
-				}
-
 				String tgtMthName = tgtMethod.getName();
 
 				ClassInfo tgtMthCI = tgtMethod.getClassInfo();

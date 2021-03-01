@@ -83,8 +83,7 @@ public class Main
 
 		jpfConfigBase.setProperty("listener", "gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
 		jpfConfigBase.setProperty("race.exclude", "");
-		jpfConfigBase.setProperty("jpf.max_memory_limit", "10240");
-		jpfConfigBase.setProperty("jpf.free_memory_limit", "1024");
+		jpfConfigBase.setProperty("jpf.used_memory_limit", "10240");
 
 		// get the main class name from JPF configuration parameters (including command line)
 		String mainClassName = jpfConfigBase.getProperty("target");
@@ -584,6 +583,9 @@ public class Main
 			ex.printStackTrace();
 			if (ex.getCause() != null) ex.getCause().printStackTrace();
 		}
+
+		// we need to make sure it is processed by the garbage collector
+		jpf = null;
 
 		System.gc();
 	}

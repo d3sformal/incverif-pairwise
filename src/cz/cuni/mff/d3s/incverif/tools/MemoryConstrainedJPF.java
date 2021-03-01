@@ -28,8 +28,7 @@ import gov.nasa.jpf.vm.bytecode.InvokeInstruction;
 
 public class MemoryConstrainedJPF extends ListenerAdapter 
 {
-	private long maxMemoryLimitMB = 0;
-	private long freeMemoryLimitMB = 0;
+	private long usedMemoryLimitMB = 0;
 
 	private boolean limitReached = false;
 
@@ -43,8 +42,7 @@ public class MemoryConstrainedJPF extends ListenerAdapter
 		VM vm = search.getVM();
 		Config config = search.getConfig();
 
-		this.maxMemoryLimitMB = config.getInt("jpf.max_memory_limit", 8192);
-		this.freeMemoryLimitMB = config.getInt("jpf.free_memory_limit", 512);
+		this.usedMemoryLimitMB = config.getInt("jpf.used_memory_limit", 8192);
 	}
 	
 	public void stateAdvanced(Search search) 
@@ -52,7 +50,7 @@ public class MemoryConstrainedJPF extends ListenerAdapter
 		long curTotalMemoryMB = Runtime.getRuntime().totalMemory() >> 20; // convert to MB
 		long curFreeMemoryMB = Runtime.getRuntime().freeMemory() >> 20; // convert to MB
 
-		if ( (curFreeMemoryMB < freeMemoryLimitMB) && (curTotalMemoryMB > (maxMemoryLimitMB - freeMemoryLimitMB)) )
+		if ( (curTotalMemoryMB - curFreeMemoryMB) > usedMemoryLimitMB )
 		{
 			System.out.println("[LOG] terminating search because memory limit was reached");
 
@@ -69,7 +67,7 @@ public class MemoryConstrainedJPF extends ListenerAdapter
 			long curTotalMemoryMB = Runtime.getRuntime().totalMemory() >> 20; // convert to MB
 			long curFreeMemoryMB = Runtime.getRuntime().freeMemory() >> 20; // convert to MB
 
-			if ( (curFreeMemoryMB < freeMemoryLimitMB) && (curTotalMemoryMB > (maxMemoryLimitMB - freeMemoryLimitMB)) )
+			if ( (curTotalMemoryMB - curFreeMemoryMB) > usedMemoryLimitMB )
 			{
 				// enforce new state where the search will be forcibly terminated
 				curTh.breakTransition(true);
