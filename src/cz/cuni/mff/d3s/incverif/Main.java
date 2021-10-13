@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020, Charles University.
+ * Copyright (C) 2021, Charles University.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -372,13 +372,13 @@ public class Main
 		double incrStddevRunningTimeOverCodeFragments = computeStandardDeviationOverRunningTimes(incrExpStats.getSumRunningTimesForThreadPairsOverCodeFragments(), incrAvgRunningTimeOverCodeFragments);
 
 		System.out.print("\n\n");
-		System.out.println("[JPF SUMMARY] incremental verification: total runs over thread pairs = " + incrExpStats.getTotalCountOfRunsOverThreadPairs() + ", timedout runs over thread pairs = " + incrExpStats.getCountOfTimedoutRunsOverThreadPairs() + ", failed runs over thread pairs = " + incrExpStats.getCountOfFailedRuns() + ", average running time over modified code fragments = " + incrAvgRunningTimeOverCodeFragments + " ms, standard deviation for running time over modified code fragments = " + incrStddevRunningTimeOverCodeFragments + " ms \n");
+		System.out.println("[JPF SUMMARY] incremental verification: total number of code fragments = " + incrExpStats.getNumberOfProcessedCodeFragments() + ", total runs over thread pairs = " + incrExpStats.getTotalCountOfRunsOverThreadPairs() + ", timedout runs over thread pairs = " + incrExpStats.getCountOfTimedoutRunsOverThreadPairs() + ", failed runs over thread pairs = " + incrExpStats.getCountOfFailedRuns() + ", average running time over modified code fragments = " + incrAvgRunningTimeOverCodeFragments + " ms, standard deviation for running time over modified code fragments = " + incrStddevRunningTimeOverCodeFragments + " ms \n");
 	
 		long fullAvgRunningTimeOverCodeFragments = computeAverageOverRunningTimes(fullExpStats.getSumRunningTimesForAllThreadsOverCodeFragments());
 		double fullStddevRunningTimeOverCodeFragments = computeStandardDeviationOverRunningTimes(fullExpStats.getSumRunningTimesForAllThreadsOverCodeFragments(), fullAvgRunningTimeOverCodeFragments);
 
 		System.out.print("\n\n");
-		System.out.println("[JPF SUMMARY] full verification: total runs over all threads = " + fullExpStats.getTotalCountOfRunsOverAllThreads() + ", timedout runs over all threads = " + fullExpStats.getCountOfTimedoutRunsOverAllThreads() + ", failed runs over all threads = " + fullExpStats.getCountOfFailedRuns() + ", average running time over modified code fragments = " + fullAvgRunningTimeOverCodeFragments + " ms, standard deviation for running time over modified code fragments = " + fullStddevRunningTimeOverCodeFragments + " ms \n");
+		System.out.println("[JPF SUMMARY] full verification: total number of code fragments = " + fullExpStats.getNumberOfProcessedCodeFragments() + ", total runs over all threads = " + fullExpStats.getTotalCountOfRunsOverAllThreads() + ", timedout runs over all threads = " + fullExpStats.getCountOfTimedoutRunsOverAllThreads() + ", failed runs over all threads = " + fullExpStats.getCountOfFailedRuns() + ", average running time over modified code fragments = " + fullAvgRunningTimeOverCodeFragments + " ms, standard deviation for running time over modified code fragments = " + fullStddevRunningTimeOverCodeFragments + " ms \n");
 	}
 
 	private static Set<CodeBlockBoundary> determineAffectedCodeBlocksForInterferingActions(WALAContext walaCtx, String mainClassName, String targetClassPath, String walaExclusionFilePath) throws Exception
@@ -720,7 +720,6 @@ public class Main
 			}
 	
 			sumRunningTimesOverAllThreadsForCurrentFragment = 0;
-
 		}
 		
 		public List<Long> getSumRunningTimesForThreadPairsOverCodeFragments()
