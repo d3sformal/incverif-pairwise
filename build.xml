@@ -102,9 +102,22 @@
 	<target name="run.benchmarks" depends="build">
 		<for list="alarmclock,prodcons,raxextended,repworkers,sor,cache4j,elevator,qsortmt,papabench" param="appname">
 		<sequential>
-			<java classname="cz.cuni.mff.d3s.incverif.Main" fork="true" output="${output.dir}/@{appname}_thpairwise.out">
-				<arg value="alg1:thpairwise"/>
-				<arg value="${output.dir}/versions_@{appname}"/>
+			<java classname="cz.cuni.mff.d3s.incverif.Main" fork="true" output="${output.dir}/@{appname}_thpairwise_finderror.out">
+				<arg value="thpairwise"/>
+				<arg value="finderror"/>
+				<arg value="${output.dir}/versions_@{appname}_finderror"/>
+				<arg value="+classpath=.,${build.benchmarks.dir}"/>
+				<arg value="+site=./site.properties"/>
+				<arg value="${config.jpf.dir}/@{appname}.jpf"/>
+				<jvmarg value="-Xmx16g"/>
+				<jvmarg value="-Xss32m"/>
+				<sysproperty key="WALA_HOME" value="."/>
+				<classpath refid="classpath.run"/>
+			</java>
+			<java classname="cz.cuni.mff.d3s.incverif.Main" fork="true" output="${output.dir}/@{appname}_thpairwise_compverif.out">
+				<arg value="thpairwise"/>
+				<arg value="compverif"/>
+				<arg value="${output.dir}/versions_@{appname}_compverif"/>
 				<arg value="+classpath=.,${build.benchmarks.dir}"/>
 				<arg value="+site=./site.properties"/>
 				<arg value="${config.jpf.dir}/@{appname}.jpf"/>

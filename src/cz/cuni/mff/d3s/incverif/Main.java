@@ -67,22 +67,32 @@ public class Main
 
 	public static void main(String[] args)
 	{
-		String mode = args[0];
+		String algorithm = args[0];
+		String mode = args[1];
 	
 		// prefix of the name of the directory into which multiple versions of the subject program (application) will be generated
-		String genVersionsPathPrefixStr = args[1];
+		String genVersionsPathPrefixStr = args[2];
 
 		// step 0: process the configuration for JPF and WALA
 
 		// we have to make a clone of the command-line arguments because JPF may change them
-		String[] cmdArgs = new String[args.length - 2];
-		System.arraycopy(args, 2, cmdArgs, 0, args.length - 2);
+		String[] cmdArgs = new String[args.length - 3];
+		System.arraycopy(args, 3, cmdArgs, 0, args.length - 3);
 
 		// load the part of configuration specified in build.xml
 		Config jpfConfigBase = JPF.createConfig(cmdArgs);
 
-		jpfConfigBase.setProperty("listener", "gov.nasa.jpf.listener.PreciseRaceDetector,cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"); //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor");
-		jpfConfigBase.setProperty("race.exclude", "");
+		String listenerCfgStr = "cz.cuni.mff.d3s.incverif.tools.TimeConstrainedJPF,cz.cuni.mff.d3s.incverif.tools.MemoryConstrainedJPF"; //,cz.cuni.mff.d3s.incverif.tools.ThreadChoiceMonitor";
+
+		// the detector of race conditions is enabled just in the bug finding mode
+		if (mode.equals("finderror"))
+		{
+			listenerCfgStr += ",gov.nasa.jpf.listener.PreciseRaceDetector";
+			jpfConfigBase.setProperty("race.exclude", "");
+		}
+
+		jpfConfigBase.setProperty("listener", listenerCfgStr);
+	
 		jpfConfigBase.setProperty("jpf.used_memory_limit", "10240");
 
 		// get the main class name from JPF configuration parameters (including command line)
@@ -278,7 +288,7 @@ public class Main
 
 					jpfConfigIncr.setProperty("listener", "cz.cuni.mff.d3s.incverif.pairwise.DynamicHappensBeforeOrdering," + origBaseCfgListeners);
 
-					if (mode.equals("alg1:thpairwise"))
+					if (algorithm.equals("thpairwise"))
 					{
 						jpfConfigIncr.setProperty("vm.scheduler.sync.class", "cz.cuni.mff.d3s.incverif.pairwise.PairwiseSyncPolicy");
 						jpfConfigIncr.setProperty("vm.scheduler.sharedness.class", "cz.cuni.mff.d3s.incverif.pairwise.PairwiseSharednessPolicy");
