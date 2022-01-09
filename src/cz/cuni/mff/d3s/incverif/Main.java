@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021, Charles University.
+ * Copyright (C) 2021-2022, Charles University.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
 package cz.cuni.mff.d3s.incverif;
 
 import java.util.Set;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.Date;
 
 import java.io.File;
@@ -61,8 +63,9 @@ import cz.cuni.mff.d3s.multiver.SourceLocations;
 
 public class Main
 {
-	public static final int TIME_LIMIT_SEC_INCR = 60;
-	public static final int TIME_LIMIT_SEC_FULL = 3600;
+	// default limits for JPF running time
+	public static int TIME_LIMIT_SEC_INCR = 60;
+	public static int TIME_LIMIT_SEC_FULL = 3600;
 
 
 	public static void main(String[] args)
@@ -89,6 +92,19 @@ public class Main
 		{
 			listenerCfgStr += ",gov.nasa.jpf.listener.PreciseRaceDetector";
 			jpfConfigBase.setProperty("race.exclude", "");
+		}
+
+		// set limits on the JPF running time for every mode
+
+		if (mode.equals("finderror"))
+		{
+			TIME_LIMIT_SEC_INCR = 60;
+			TIME_LIMIT_SEC_FULL = 3600;
+		}
+		if (mode.equals("safetyverif"))
+		{
+			TIME_LIMIT_SEC_INCR = 600;
+			TIME_LIMIT_SEC_FULL = 3600;
 		}
 
 		jpfConfigBase.setProperty("listener", listenerCfgStr);
@@ -130,11 +146,11 @@ public class Main
 			// every modified code fragment represents one possibly interfering action together with the directly affected statements (bytecode instructions)
 			// we do this in two steps: (1) running the necessary static analyses to identify the possibly interfering actions, (2) followed by simple postprocessing to expand the bytecode ranges in order to cover all the directly affected bytecode instructions
 
-		Set<CodeBlockBoundary> relevantModifiedCodeFragments = null;
+		Set<CodeBlockBoundary> allRelevantModifiedCodeFragments = null;
 
 		try
 		{
-			relevantModifiedCodeFragments = determineAffectedCodeBlocksForInterferingActions(walaCtx, mainClassName, targetClassPathStr, walaExclusionFilePathStr);
+			allRelevantModifiedCodeFragments = determineAffectedCodeBlocksForInterferingActions(walaCtx, mainClassName, targetClassPathStr, walaExclusionFilePathStr);
 		}
 		catch (Exception ex)
 		{
@@ -156,8 +172,20 @@ public class Main
 		ExperimentsStats incrExpStats = new ExperimentsStats();
 		ExperimentsStats fullExpStats = new ExperimentsStats();
 
-		for (CodeBlockBoundary modifiedCBB : relevantModifiedCodeFragments)
+		System.out.print("\n");
+		System.out.println("[LOG] total number of modified code fragments = " + allRelevantModifiedCodeFragments.size());
+
+		Set<CodeBlockBoundary> remainingModifiedCodeFragments = new HashSet<CodeBlockBoundary>(allRelevantModifiedCodeFragments);
+
+		for (Iterator<CodeBlockBoundary> rmcfIt = remainingModifiedCodeFragments.iterator(); rmcfIt.hasNext(); )
 		{
+			// reporting actual progress
+			System.out.print("\n");
+			System.out.println("[LOG] current number of remaining modified code fragments (yet to be processed) = " + remainingModifiedCodeFragments.size());
+
+			CodeBlockBoundary modifiedCBB = rmcfIt.next();
+			rmcfIt.remove();
+	
 			incrExpStats.initForNewCodeFragment();
 			fullExpStats.initForNewCodeFragment();
 
@@ -236,7 +264,7 @@ public class Main
 				additionCBB = (CodeBlockBoundary) modifiedCBB.clone();
 
 				// use the least other known CBB that includes/wraps the given modifiedCBB, if there is such for the method, or the whole method
-				CodeBlockBoundary wrapperCBB = findLeastWrappingCBB(modifiedCBB, relevantModifiedCodeFragments, walaCtx);
+				CodeBlockBoundary wrapperCBB = findLeastWrappingCBB(modifiedCBB, allRelevantModifiedCodeFragments, walaCtx);
 				deletionCBB = (CodeBlockBoundary) wrapperCBB.clone();
 			
 				// we also have to shift the end location forward to accommodate for the removed sequence of bytecode instructions (that is determined by the given modifiedCBB)

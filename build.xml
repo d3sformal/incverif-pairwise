@@ -114,10 +114,10 @@
 				<sysproperty key="WALA_HOME" value="."/>
 				<classpath refid="classpath.run"/>
 			</java>
-			<java classname="cz.cuni.mff.d3s.incverif.Main" fork="true" output="${output.dir}/@{appname}_thpairwise_compverif.out">
+			<java classname="cz.cuni.mff.d3s.incverif.Main" fork="true" output="${output.dir}/@{appname}_thpairwise_safetyverif.out">
 				<arg value="thpairwise"/>
-				<arg value="compverif"/>
-				<arg value="${output.dir}/versions_@{appname}_compverif"/>
+				<arg value="safetyverif"/>
+				<arg value="${output.dir}/versions_@{appname}_safetyverif"/>
 				<arg value="+classpath=.,${build.benchmarks.dir}"/>
 				<arg value="+site=./site.properties"/>
 				<arg value="${config.jpf.dir}/@{appname}.jpf"/>
